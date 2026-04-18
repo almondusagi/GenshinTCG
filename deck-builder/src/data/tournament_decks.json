@@ -1,0 +1,50 @@
+[
+  {
+    "id": "deck_ayamiya_1",
+    "name": "神宵重 (Ayaka-Yoimiya-Chongyun)",
+    "characters": ["char_ayaka", "char_yoimiya", "char_chongyun"],
+    "actions": [
+      "weapon_skyward_harp", "weapon_skyward_harp",
+      "artifact_blizzard_strayer", "artifact_blizzard_strayer",
+      "event_liben", "event_liben",
+      "support_paimon", "support_paimon",
+      "support_kanten_senmyou_blessing", "support_kanten_senmyou_blessing",
+      "event_send_off", "event_send_off",
+      "event_changing_shifts", "event_changing_shifts",
+      "event_leave_it_to_me", "event_leave_it_to_me",
+      "event_starsigns", "event_starsigns",
+      "event_calxs_arts", "event_calxs_arts",
+      "support_jade_chamber", "support_jade_chamber",
+      "event_strategize", "event_strategize",
+      "event_ihavent_lost_yet", "event_ihavent_lost_yet",
+      "talent_kanten_senmyou_blessing_ayaka", "talent_kanten_senmyou_blessing_ayaka",
+      "talent_naganohara_meteor_swarm", "talent_naganohara_meteor_swarm"
+    ],
+    "source": "Dummy Tournament 1",
+    "score": 95
+  },
+  {
+    "id": "deck_quicken_1",
+    "name": "激化 (Collei-Fischl-Keqing)",
+    "characters": ["char_fischl", "char_keqing", "char_collei"],
+    "actions": [
+      "event_strategize", "event_strategize",
+      "event_leave_it_to_me", "event_leave_it_to_me",
+      "support_paimon", "support_paimon",
+      "event_changing_shifts", "event_changing_shifts",
+      "event_starsigns", "event_starsigns",
+      "talent_floral_sidewinder", "talent_floral_sidewinder",
+      "talent_thundering_penance", "talent_thundering_penance",
+      "talent_stellar_predator", "talent_stellar_predator",
+      "support_jade_chamber", "support_jade_chamber",
+      "event_send_off", "event_send_off",
+      "weapon_sacrificial_bow", "weapon_sacrificial_bow",
+      "artifact_thundering_fury", "artifact_thundering_fury",
+      "event_liben", "event_liben",
+      "event_calxs_arts", "event_calxs_arts",
+      "event_ihavent_lost_yet", "event_ihavent_lost_yet"
+    ],
+    "source": "Dummy Tournament 2",
+    "score": 92
+  }
+]
