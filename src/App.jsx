@@ -1,120 +1,108 @@
-import React, { useState, useEffect } from 'react';
+import React,{useState,useEffect,useMemo} from 'react';
 import DeckBuilder from './components/DeckBuilder';
 import Analytics from './components/Analytics';
 import TournamentUploader from './components/TournamentUploader';
 import CardReviewTable from './components/CardReviewTable';
+import TagManager from './components/TagManager';
 import dbData from './data/cards_db.json';
 import defaultMetaDecks from './data/tournament_decks.json';
-import { calculateDeckScore, getMetaAnalytics, getUserRatings, saveUserRatings } from './utils/scoring';
-import { Swords, BarChart3, Database, Star } from 'lucide-react';
+import {calcDeckScore,getMetaAnalytics} from './utils/tagScoring';
+import {
+  loadTags,loadTagCombos,loadCardTags,loadGroups,
+  loadMeta,saveMeta,clearMeta as clearMetaStorage,
+  initDefaults
+} from './utils/storage';
+import {Swords,BarChart3,Database,Star,Tag} from 'lucide-react';
 
-function App() {
-  const [activeTab, setActiveTab] = useState('build');
-  const [cards, setCards] = useState({});
-  const [metaDecks, setMetaDecks] = useState([]);
-  const [ratings, setRatings] = useState({});
+const NAV=[
+  {id:'build',  label:'構築',      Icon:Swords},
+  {id:'review', label:'カード評価', Icon:Star},
+  {id:'tags',   label:'タグ管理',   Icon:Tag},
+  {id:'analytics',label:'メタ分析', Icon:BarChart3},
+  {id:'data',   label:'データ管理', Icon:Database},
+];
 
-  // Deck state
-  const [selectedChars, setSelectedChars] = useState([]);
-  const [selectedActions, setSelectedActions] = useState([]);
+export default function App(){
+  const [activeTab,setTab]=useState('build');
+  const [cards,setCards]=useState({});
+  const [metaDecks,setMeta]=useState([]);
+  const [tags,setTags]=useState([]);
+  const [groups,setGroups]=useState([]);
+  const [tagCombos,setCombos]=useState([]);
+  const [cardTags,setCardTags]=useState({});
+  const [selectedChars,setChars]=useState([]);
+  const [selectedActions,setActions]=useState([]);
 
-  useEffect(() => {
-    setCards(dbData.cards);
-    setRatings(getUserRatings());
+  useEffect(()=>{
+    const c=dbData.cards;
+    setCards(c);
+    // First-run: init defaults (sets groups, tags, card cost tags)
+    initDefaults(c);
+    // Load from storage
+    setGroups(loadGroups());
+    setTags(loadTags());
+    setCombos(loadTagCombos());
+    setCardTags(loadCardTags());
+    const saved=loadMeta();
+    setMeta(saved??defaultMetaDecks);
+  },[]);
 
-    const savedMeta = localStorage.getItem('genshin_tcg_meta');
-    if (savedMeta) {
-      try { setMetaDecks(JSON.parse(savedMeta)); }
-      catch { setMetaDecks(defaultMetaDecks); }
-    } else {
-      setMetaDecks(defaultMetaDecks);
-    }
-  }, []);
+  const score=useMemo(()=>calcDeckScore(selectedChars,selectedActions,cardTags,tags,tagCombos),
+    [selectedChars,selectedActions,cardTags,tags,tagCombos]);
 
-  const score = calculateDeckScore(selectedChars, selectedActions, ratings);
+  const handleUpdateMeta=d=>{ const c=[...metaDecks,...d]; setMeta(c); saveMeta(c); };
+  const handleClearMeta=()=>{ setMeta(defaultMetaDecks); clearMetaStorage(); };
 
-  const handleRatingsChange = (newRatings) => {
-    setRatings(newRatings);
-  };
-
-  const handleUpdateMeta = (newDecks) => {
-    const combined = [...metaDecks, ...newDecks];
-    setMetaDecks(combined);
-    localStorage.setItem('genshin_tcg_meta', JSON.stringify(combined));
-  };
-
-  const clearMeta = () => {
-    setMetaDecks(defaultMetaDecks);
-    localStorage.removeItem('genshin_tcg_meta');
-  };
-
-  const NAV_ITEMS = [
-    { id: 'build',     label: '構築',      Icon: Swords },
-    { id: 'review',    label: 'カード評価', Icon: Star },
-    { id: 'analytics', label: 'メタ分析',  Icon: BarChart3 },
-    { id: 'data',      label: 'データ管理', Icon: Database },
-  ];
-
-  return (
+  return(
     <div className="app-container">
-      <nav className="glass-panel navbar">
-        <div className="brand">
-          <Swords size={28} />
-          GI-TCG Analyzer
-        </div>
+      {/* Desktop nav */}
+      <nav className="glass-panel navbar desktop-nav">
+        <div className="brand"><Swords size={24}/> GI-TCG Analyzer</div>
         <div className="nav-tabs">
-          {NAV_ITEMS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              className={`tab-btn ${activeTab === id ? 'active' : ''}`}
-              onClick={() => setActiveTab(id)}
-            >
-              <Icon size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
-              {label}
+          {NAV.map(({id,label,Icon})=>(
+            <button key={id} className={`tab-btn ${activeTab===id?'active':''}`} onClick={()=>setTab(id)}>
+              <Icon size={14} style={{marginRight:5,verticalAlign:'text-bottom'}}/>{label}
             </button>
           ))}
         </div>
       </nav>
 
+      {/* Mobile top bar */}
+      <div className="mobile-topbar">
+        <span className="brand"><Swords size={18}/> GI-TCG</span>
+      </div>
+
       <main className="main-content">
-        {activeTab === 'build' && (
-          <DeckBuilder
-            cards={cards}
-            selectedChars={selectedChars}
-            setSelectedChars={setSelectedChars}
-            selectedActions={selectedActions}
-            setSelectedActions={setSelectedActions}
-            score={score}
-            ratings={ratings}
-          />
+        {activeTab==='build'&&(
+          <DeckBuilder cards={cards}
+            selectedChars={selectedChars} setSelectedChars={setChars}
+            selectedActions={selectedActions} setSelectedActions={setActions}
+            score={score} cardTags={cardTags} tags={tags} tagCombos={tagCombos}/>
         )}
-
-        {activeTab === 'review' && (
-          <CardReviewTable
-            cards={cards}
-            ratings={ratings}
-            onRatingsChange={handleRatingsChange}
-          />
+        {activeTab==='review'&&(
+          <CardReviewTable cards={cards} tags={tags} groups={groups}
+            cardTags={cardTags} setCardTags={setCardTags} tagCombos={tagCombos}/>
         )}
-
-        {activeTab === 'analytics' && (
-          <Analytics
-            metaDecks={metaDecks}
-            cards={cards}
-            analyticsData={getMetaAnalytics(metaDecks)}
-          />
+        {activeTab==='tags'&&(
+          <TagManager tags={tags} setTags={setTags} groups={groups} setGroups={setGroups}
+            tagCombos={tagCombos} setTagCombos={setCombos}/>
         )}
-
-        {activeTab === 'data' && (
-          <TournamentUploader
-            metaDecks={metaDecks}
-            onUpdateMeta={handleUpdateMeta}
-            onClearMeta={clearMeta}
-          />
+        {activeTab==='analytics'&&(
+          <Analytics metaDecks={metaDecks} cards={cards} analyticsData={getMetaAnalytics(metaDecks)}/>
+        )}
+        {activeTab==='data'&&(
+          <TournamentUploader metaDecks={metaDecks} onUpdateMeta={handleUpdateMeta} onClearMeta={handleClearMeta}/>
         )}
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="mobile-bottom-nav">
+        {NAV.map(({id,label,Icon})=>(
+          <button key={id} className={`mobile-nav-item ${activeTab===id?'active':''}`} onClick={()=>setTab(id)}>
+            <Icon size={18}/><span>{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
-
-export default App;

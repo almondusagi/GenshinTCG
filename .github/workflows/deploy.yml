@@ -10,29 +10,41 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      - name: Checkout code
+      - name: リポジトリをチェックアウト
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Node.js をセットアップ
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 20
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: 依存パッケージをインストール
+        run: npm ci
 
-      - name: Build
+      - name: ビルド
         run: npm run build
 
-      - name: Upload artifact
+      - name: GitHub Pages の設定
+        uses: actions/configure-pages@v4
+
+      - name: dist フォルダをアップロード
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: dist
 
-      - name: Deploy to GitHub Pages
+      - name: GitHub Pages へデプロイ
         id: deployment
-        uses: actions/deploy-pages@v3
+        uses: actions/deploy-pages@v4

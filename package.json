@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://almondusagi.github.io/GITCG-deck/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

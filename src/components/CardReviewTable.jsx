@@ -1,195 +1,248 @@
-import React, { useState, useMemo } from 'react';
-import { saveUserRatings } from '../utils/scoring';
-import { Save, ChevronLeft, ChevronRight } from 'lucide-react';
+import React,{useState,useMemo,useCallback,useEffect,useRef} from 'react';
+import {ChevronLeft,ChevronRight,X,ChevronDown,ChevronRight as CR} from 'lucide-react';
+import {saveCardTags} from '../utils/storage';
+import {calcCardScore} from '../utils/tagScoring';
 
-const TYPE_LABELS = {
-  character: 'キャラ', weapon: '武器', artifact: '聖遺物',
-  talent: '天賦', support: 'サポート', event: 'イベント',
-};
+const TYPE_LABELS={character:'キャラ',weapon:'武器',artifact:'聖遺物',talent:'天賦',support:'サポート',event:'イベント'};
+const TYPE_COLORS={character:'#f87171',weapon:'#60a5fa',artifact:'#c084fc',talent:'#fbbf24',support:'#34d399',event:'#94a3b8'};
+const ELEM_COLORS={氷:'#93c5fd',水:'#60a5fa',炎:'#f87171',雷:'#c084fc',風:'#34d399',岩:'#fbbf24',草:'#4ade80',無色:'#94a3b8'};
+const TYPE_FILTERS=['all','character','weapon','artifact','talent','support','event'];
+const PAGE_SIZE=40;
 
-const TYPE_COLORS = {
-  character: '#f87171', weapon: '#60a5fa', artifact: '#c084fc',
-  talent: '#fbbf24', support: '#34d399', event: '#94a3b8',
-};
+// ── Fixed tag picker overlay ──────────────────────────────────────────────────
+function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onToggle}){
+  const ref=useRef(null);
+  // Clamp to viewport
+  useEffect(()=>{
+    if(!ref.current) return;
+    const el=ref.current;
+    const rect=el.getBoundingClientRect();
+    let{left,top}=position;
+    if(left+rect.width>window.innerWidth-8) left=window.innerWidth-rect.width-8;
+    if(top+rect.height>window.innerHeight-8) top=window.innerHeight-rect.height-8;
+    if(left<8) left=8; if(top<8) top=8;
+    el.style.left=left+'px'; el.style.top=top+'px';
+  },[position]);
 
-const ELEMENT_COLORS = {
-  氷: '#93c5fd', 水: '#60a5fa', 炎: '#f87171', 雷: '#c084fc',
-  風: '#34d399', 岩: '#fbbf24', 草: '#4ade80', 無色: '#94a3b8',
-};
+  // Close on outside click
+  useEffect(()=>{
+    const h=e=>{ if(ref.current&&!ref.current.contains(e.target)) onClose(); };
+    setTimeout(()=>document.addEventListener('mousedown',h),0);
+    return()=>document.removeEventListener('mousedown',h);
+  },[onClose]);
 
-const PAGE_SIZE = 50;
-const TYPE_FILTERS = ['all', 'character', 'weapon', 'artifact', 'talent', 'support', 'event'];
+  const [collapsed,setCollapsed]=useState({});
+  const toggleCollapse=gid=>setCollapsed(p=>({...p,[gid]:!p[gid]}));
 
-export default function CardReviewTable({ cards, ratings, onRatingsChange }) {
-  const [localRatings, setLocalRatings] = useState({ ...ratings });
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // name | rating | type
-  const [page, setPage] = useState(0);
-  const [saved, setSaved] = useState(false);
+  // Count of each tag on this card
+  const countMap=useMemo(()=>{
+    const m={};
+    for(const t of cardTagArr) m[t]=(m[t]||0)+1;
+    return m;
+  },[cardTagArr]);
 
-  // Sync when parent ratings change (e.g., initial load)
-  React.useEffect(() => {
-    setLocalRatings({ ...ratings });
-  }, [ratings]);
+  // Group constraint: which tag name is already "locked in" for each group?
+  const groupLock=useMemo(()=>{
+    const m={};
+    for(const tag of tags){
+      if(!tag.groupId) continue;
+      if((countMap[tag.name]||0)>0) m[tag.groupId]=tag.name;
+    }
+    return m;
+  },[tags,countMap]);
 
-  const filtered = useMemo(() => {
-    let list = Object.values(cards);
-    if (typeFilter !== 'all') list = list.filter(c => c.type === typeFilter);
-    if (search) list = list.filter(c => c.name.includes(search));
-    if (sortBy === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortBy === 'rating') list.sort((a, b) => (localRatings[b.id] || 0) - (localRatings[a.id] || 0));
-    else if (sortBy === 'type') list.sort((a, b) => a.type.localeCompare(b.type));
-    return list;
-  }, [cards, typeFilter, search, sortBy, localRatings]);
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const pageCards = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-
-  const handleRating = (id, val) => {
-    const num = Math.max(-5, Math.min(5, Number(val) || 0));
-    setLocalRatings(prev => ({ ...prev, [id]: num }));
-    setSaved(false);
+  const renderTagBtn=(tag)=>{
+    const cnt=countMap[tag.name]||0;
+    const isLocked=tag.groupId&&groupLock[tag.groupId]&&groupLock[tag.groupId]!==tag.name;
+    return(
+      <button key={tag.id}
+        className={`tag-toggle-btn ${cnt>0?'on':''} ${isLocked?'locked':''}`}
+        disabled={isLocked}
+        onClick={()=>onToggle(cardId,tag.name,'add')}
+        onContextMenu={e=>{e.preventDefault();onToggle(cardId,tag.name,'remove');}}>
+        {tag.name}
+        {cnt>0&&<span className="tag-cnt-badge">×{cnt}</span>}
+        <span className="tag-score-hint" style={{color:tag.score>0?'#34d399':tag.score<0?'#f87171':'#64748b'}}>
+          {tag.score>0?`+${tag.score}`:tag.score}
+        </span>
+      </button>
+    );
   };
 
-  const handleSave = () => {
-    saveUserRatings(localRatings);
-    onRatingsChange(localRatings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
+  const ungrouped=tags.filter(t=>!t.groupId);
 
-  const resetAll = () => {
-    setLocalRatings({});
-    setSaved(false);
-  };
+  return(
+    <div ref={ref} className="tag-picker-fixed" style={{left:position.left,top:position.top}}>
+      <div className="tag-picker-header">
+        <span>タグを選択（右クリックで削除）</span>
+        <button className="btn-icon" onClick={onClose}><X size={13}/></button>
+      </div>
+      {tags.length===0&&<p className="empty-msg" style={{padding:'6px 0'}}>先に「タグ管理」でタグを作成</p>}
 
-  const ratedCount = Object.values(localRatings).filter(v => v !== 0).length;
-  const avgRating = ratedCount > 0
-    ? (Object.values(localRatings).filter(v => v !== 0).reduce((s, v) => s + v, 0) / ratedCount).toFixed(1)
-    : 0;
+      {groups.map(g=>{
+        const gTags=tags.filter(t=>t.groupId===g.id);
+        if(!gTags.length) return null;
+        const isOpen=!collapsed[g.id];
+        return(
+          <div key={g.id} className="picker-group">
+            <button className="picker-group-hd" onClick={()=>toggleCollapse(g.id)}>
+              {isOpen?<ChevronDown size={12}/>:<CR size={12}/>}
+              {g.name}
+              {groupLock[g.id]&&<span className="tag-pill" style={{marginLeft:4,fontSize:'.65rem'}}>{groupLock[g.id]}</span>}
+            </button>
+            {isOpen&&<div className="tag-picker-list">{gTags.map(renderTagBtn)}</div>}
+          </div>
+        );
+      })}
 
-  return (
-    <div className="review-wrapper">
-      {/* Header */}
-      <div className="review-header-bar glass-panel">
-        <div className="review-stats">
-          <div className="rev-stat">
-            <span className="rev-stat-num">{ratedCount}</span>
-            <span className="rev-stat-label">評価済み</span>
-          </div>
-          <div className="rev-stat">
-            <span className="rev-stat-num" style={{ color: avgRating > 0 ? '#34d399' : avgRating < 0 ? '#f87171' : '#94a3b8' }}>
-              {avgRating > 0 ? '+' : ''}{avgRating}
-            </span>
-            <span className="rev-stat-label">平均評価</span>
-          </div>
-          <div className="rev-stat">
-            <span className="rev-stat-num">{Object.keys(cards).length}</span>
-            <span className="rev-stat-label">カード総数</span>
-          </div>
-        </div>
-        <div className="review-controls">
-          <button className="deck-btn" onClick={resetAll}>リセット</button>
-          <button className={`deck-btn save-confirm-btn ${saved ? 'saved' : ''}`} onClick={handleSave}>
-            <Save size={15} />
-            {saved ? '✓ 保存しました' : '評価を保存'}
+      {ungrouped.length>0&&(
+        <div className="picker-group">
+          <button className="picker-group-hd" onClick={()=>toggleCollapse('__ug')}>
+            {!collapsed['__ug']?<ChevronDown size={12}/>:<CR size={12}/>}
+            グループなし
           </button>
+          {!collapsed['__ug']&&<div className="tag-picker-list">{ungrouped.map(renderTagBtn)}</div>}
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Filters */}
+// ── Main component ────────────────────────────────────────────────────────────
+export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,tagCombos}){
+  const [typeFilter,setTF]=useState('all');
+  const [search,setSearch]=useState('');
+  const [page,setPage]=useState(0);
+  const [picker,setPicker]=useState(null); // {cardId, left, top}
+
+  const filtered=useMemo(()=>{
+    let l=Object.values(cards);
+    if(typeFilter!=='all') l=l.filter(c=>c.type===typeFilter);
+    if(search) l=l.filter(c=>c.name.includes(search));
+    return l;
+  },[cards,typeFilter,search]);
+
+  const totalPages=Math.ceil(filtered.length/PAGE_SIZE);
+  const pageCards=filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
+
+  const openPicker=useCallback((cardId,e)=>{
+    e.stopPropagation();
+    if(picker?.cardId===cardId){ setPicker(null); return; }
+    const rect=e.currentTarget.getBoundingClientRect();
+    setPicker({cardId,left:rect.left,top:rect.bottom+6});
+  },[picker]);
+
+  const closePicker=useCallback(()=>setPicker(null),[]);
+
+  const handleToggle=useCallback((cardId,tagName,action)=>{
+    setCardTags(prev=>{
+      const cur=[...(prev[cardId]||[])];
+      if(action==='add'){
+        // Group constraint check
+        const tag=tags.find(t=>t.name===tagName);
+        if(tag?.groupId){
+          const hasDiff=cur.some(n=>{
+            const t2=tags.find(t=>t.name===n);
+            return t2?.groupId===tag.groupId&&n!==tagName;
+          });
+          if(hasDiff) return prev; // blocked
+        }
+        cur.push(tagName);
+      } else {
+        // Remove last occurrence
+        const idx=[...cur].reverse().findIndex(n=>n===tagName);
+        if(idx>=0) cur.splice(cur.length-1-idx,1);
+      }
+      const updated={...prev,[cardId]:cur};
+      saveCardTags(updated);
+      return updated;
+    });
+  },[tags]);
+
+  const score=id=>calcCardScore(id,cardTags,tags,tagCombos);
+
+  return(
+    <div className="review-layout">
       <div className="glass-panel review-filter-bar">
-        <input
-          className="search-input"
-          placeholder="カード名で検索..."
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(0); }}
-        />
+        <input className="search-input" placeholder="カード名で検索..."
+          value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/>
         <div className="filters">
-          {TYPE_FILTERS.map(t => (
-            <button key={t}
-              className={`filter-btn ${typeFilter === t ? 'active' : ''}`}
-              onClick={() => { setTypeFilter(t); setPage(0); }}
-            >
-              {t === 'all' ? '全て' : TYPE_LABELS[t]}
+          {TYPE_FILTERS.map(t=>(
+            <button key={t} className={`filter-btn ${typeFilter===t?'active':''}`}
+              onClick={()=>{setTF(t);setPage(0);}}>
+              {t==='all'?'全て':TYPE_LABELS[t]}
             </button>
           ))}
         </div>
-        <div className="sort-row">
-          <span className="rev-stat-label">並び替え：</span>
-          {[['name','名前'],['rating','評価'],['type','タイプ']].map(([v, l]) => (
-            <button key={v}
-              className={`filter-btn ${sortBy === v ? 'active' : ''}`}
-              onClick={() => setSortBy(v)}
-            >
-              {l}
-            </button>
-          ))}
+        <div className="review-stats-row">
+          <span className="pool-count">{filtered.length}枚</span>
+          <span className="pool-count">タグ付き:{Object.values(cardTags).filter(t=>t?.length>0).length}枚</span>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="glass-panel review-table-wrap">
-        <div className="review-table">
-          <div className="review-col-header">
-            <span className="rcol-card">カード</span>
-            <span className="rcol-type">タイプ</span>
-            <span className="rcol-elem">元素</span>
-            <span className="rcol-rating">評価 (-5〜5)</span>
-          </div>
-          {pageCards.map(card => {
-            const r = localRatings[card.id] || 0;
-            return (
-              <div key={card.id} className={`review-row ${r !== 0 ? 'rated' : ''}`}>
-                <div className="rcol-card">
-                  <img src={card.url} alt="" className="review-thumb"
-                       onError={e => { e.target.style.display = 'none'; }} />
-                  <span className="review-card-name">{card.name}</span>
+      <div className="glass-panel review-grid-wrap">
+        <div className="review-card-grid">
+          {pageCards.map(card=>{
+            const myTags=cardTags[card.id]||[];
+            const s=score(card.id);
+            const isOpen=picker?.cardId===card.id;
+            const ec=ELEM_COLORS[card.element]||'#94a3b8';
+
+            return(
+              <div key={card.id}
+                className={`review-card-cell ${myTags.length>0?'tagged':''} ${isOpen?'editing':''}`}
+                onClick={e=>openPicker(card.id,e)}>
+                <div className="rc-elem-strip" style={{background:ec}}/>
+                <img src={card.url} alt={card.name} className="rc-img"
+                  onError={e=>{e.target.style.display='none';}} loading="lazy"/>
+                <div className="rc-info">
+                  <span className="rc-name">{card.name}</span>
+                  <span className="rc-type" style={{color:TYPE_COLORS[card.type]}}>{TYPE_LABELS[card.type]}</span>
                 </div>
-                <span className="rcol-type">
-                  <span className="type-chip" style={{ color: TYPE_COLORS[card.type], borderColor: TYPE_COLORS[card.type] + '55' }}>
-                    {TYPE_LABELS[card.type] || card.type}
-                  </span>
-                </span>
-                <span className="rcol-elem">
-                  <span className="elem-chip" style={{ color: ELEMENT_COLORS[card.element] || '#94a3b8' }}>
-                    {card.element}
-                  </span>
-                </span>
-                <div className="rcol-rating">
-                  <input
-                    type="range" min="-5" max="5" step="1"
-                    value={r}
-                    onChange={e => handleRating(card.id, e.target.value)}
-                    className={`rating-slider ${r > 0 ? 'positive' : r < 0 ? 'negative' : ''}`}
-                  />
-                  <input
-                    type="number" min="-5" max="5"
-                    value={r}
-                    onChange={e => handleRating(card.id, e.target.value)}
-                    className="rating-num"
-                  />
-                  <span className="rating-display" style={{ color: r > 0 ? '#34d399' : r < 0 ? '#f87171' : '#475569' }}>
-                    {r > 0 ? `+${r}` : r}
-                  </span>
-                </div>
+                {myTags.length>0&&(
+                  <div className="rc-tags">
+                    {/* Show unique tag names with count */}
+                    {[...new Set(myTags)].map(t=>{
+                      const cnt=myTags.filter(x=>x===t).length;
+                      return(
+                        <span key={t} className="rc-tag-chip">
+                          {t}{cnt>1&&<span style={{fontSize:'.6rem',opacity:.8}}>×{cnt}</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {s!==0&&(
+                  <div className="rc-score-badge" style={{
+                    background:s>0?'rgba(52,211,153,.2)':'rgba(248,113,113,.2)',
+                    color:s>0?'#34d399':'#f87171'}}>
+                    {s>0?`+${s}`:s}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+
+        <div className="pagination">
+          <button className="page-btn" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={15}/></button>
+          <span className="page-info">{page+1} / {Math.max(1,totalPages)}</span>
+          <button className="page-btn" disabled={page>=totalPages-1} onClick={()=>setPage(p=>p+1)}><ChevronRight size={15}/></button>
+        </div>
       </div>
 
-      {/* Pagination */}
-      <div className="pagination">
-        <button className="page-btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-          <ChevronLeft size={16} />
-        </button>
-        <span className="page-info">{page + 1} / {Math.max(1, totalPages)}  ({filtered.length}枚)</span>
-        <button className="page-btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-          <ChevronRight size={16} />
-        </button>
-      </div>
+      {/* Fixed overlay picker rendered at body level via portal-like approach */}
+      {picker&&(
+        <TagPickerOverlay
+          cardId={picker.cardId}
+          cardTagArr={cardTags[picker.cardId]||[]}
+          tags={tags}
+          groups={groups}
+          position={{left:picker.left,top:picker.top}}
+          onClose={closePicker}
+          onToggle={handleToggle}
+        />
+      )}
     </div>
   );
 }
