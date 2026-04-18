@@ -28,7 +28,7 @@ jobs:
       - name: Node.js をセットアップ
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: 依存パッケージをインストール
@@ -39,6 +39,8 @@ jobs:
 
       - name: GitHub Pages の設定
         uses: actions/configure-pages@v4
+        with:
+          enablement: true   # ← これが必須: Pagesを自動で有効化する
 
       - name: dist フォルダをアップロード
         uses: actions/upload-pages-artifact@v3
