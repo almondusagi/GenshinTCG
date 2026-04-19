@@ -284,6 +284,16 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .combo-score-badge{font-family:'Rajdhani',sans-serif;font-size:.95rem;font-weight:700;}
 .combo-scope-badge{font-size:.65rem;padding:1px 6px;border-radius:8px;background:rgba(255,255,255,.08);
   color:var(--muted);border:1px solid rgba(255,255,255,.12);}
+/* Calc adjuster op badge */
+.adj-op-badge{
+  display:inline-flex;align-items:center;padding:2px 10px;border-radius:9px;
+  font-family:'Rajdhani',sans-serif;font-size:.95rem;font-weight:700;
+  background:rgba(96,165,250,.1);border:1px solid;white-space:nowrap;
+}
+/* Adjuster add form row */
+.adj-form-row{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+}
 .save-confirm-btn{background:rgba(79,70,229,.15);border-color:rgba(99,102,241,.3);color:#818cf8;}
 .save-confirm-btn.saved{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.3);color:#34d399;}
 

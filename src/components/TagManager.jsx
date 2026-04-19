@@ -1,18 +1,16 @@
 import React,{useState,useEffect} from 'react';
-import {Plus,Trash2,Zap,Save,ArrowUp,ArrowDown,Download,Upload,Tag,Layers} from 'lucide-react';
-import {saveTags,saveTagCombos,saveGroups,exportBackup,importBackup,
-  loadTags,loadTagCombos,loadGroups,loadCardTags,loadPresets} from '../utils/storage';
+import {Plus,Trash2,Zap,Save,ArrowUp,ArrowDown,Download,Upload,Tag,Layers,Calculator} from 'lucide-react';
+import {saveTags,saveTagCombos,saveGroups,saveCalcAdjusters,exportBackup,importBackup} from '../utils/storage';
 
 const genId=()=>Math.random().toString(36).slice(2,9);
 const SCOPES=[{v:'deck',l:'デッキ全体'},{v:'card',l:'カード単体'}];
+const OP_TYPES=[{v:'×',l:'× 掛け算'},{v:'÷',l:'÷ 割り算'}];
 
 // ── Score display helpers ──────────────────────────────────────────────────────
-// Stored score is always a number. Display uses '' for 0 (cleaner UI).
-// Number('') === 0, so empty input === score 0 in all calculations.
 const toDisplay = v => (v === 0 || v === null || v === undefined) ? '' : String(v);
 const fromInput  = s => s === '' ? 0 : Number(s);
 
-export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos}){
+export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos,calcAdjusters,setCalcAdjusters}){
   const [newTagName,setNTN]=useState('');
   // New tag score: '' = 0
   const [newTagScore,setNTS]=useState('');
@@ -20,6 +18,8 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const [newGroupName,setNGN]=useState('');
   // Combo override score: '' = 0
   const [combo,setCombo]=useState({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:'',scope:'deck'});
+  // Calc adjuster form state
+  const [adj,setAdj]=useState({opType:'×',value:'',scope:'deck'});
   const [saved,setSaved]=useState(false);
   const [backupText,setBackupText]=useState('');
   const [backupMsg,setBackupMsg]=useState('');
@@ -127,7 +127,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const handleImport=()=>{
     try{
       const d=importBackup(backupText);
-      if(d.groups)    setGroups(d.groups);
+      if(d.groups)         setGroups(d.groups);
       if(d.tags){
         setTags(d.tags);
         // Reset score display after restore so new values show correctly
@@ -135,9 +135,29 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         for(const t of d.tags) m[t.id]=toDisplay(t.score);
         setScoreInputs(m);
       }
-      if(d.tagCombos) setTagCombos(d.tagCombos);
+      if(d.tagCombos)     setTagCombos(d.tagCombos);
+      if(d.calcAdjusters) setCalcAdjusters(d.calcAdjusters);
       setBackupText(''); setBackupMsg('✓ 復元しました'); setTimeout(()=>setBackupMsg(''),3000);
     }catch(e){ setBackupMsg('❌ '+e.message); }
+  };
+
+  // ── Calc adjuster actions ────────────────────────────────────────────────────
+  const addAdj=()=>{
+    const v=Number(adj.value);
+    if(!adj.value||isNaN(v)||v===0) return;
+    const updated=[...(calcAdjusters||[]),{id:genId(),opType:adj.opType,value:v,scope:adj.scope}];
+    setCalcAdjusters(updated); saveCalcAdjusters(updated);
+    setAdj({opType:'×',value:'',scope:'deck'});
+  };
+  const delAdj=id=>{
+    const updated=(calcAdjusters||[]).filter(a=>a.id!==id);
+    setCalcAdjusters(updated); saveCalcAdjusters(updated);
+  };
+  const moveAdj=(idx,dir)=>{
+    const a=[...(calcAdjusters||[])],ni=idx+dir;
+    if(ni<0||ni>=a.length) return;
+    [a[idx],a[ni]]=[a[ni],a[idx]];
+    setCalcAdjusters(a); saveCalcAdjusters(a);
   };
 
   // Render tag rows grouped
@@ -308,6 +328,66 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
                 </span>
               </div>
               <button className="btn-icon danger" onClick={()=>delCombo(c.id)}><Trash2 size={13}/></button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Calc Adjusters ───────────────────────────── */}
+      <section className="glass-panel tagmgr-section" style={{gridColumn:'1/-1'}}>
+        <div className="section-head">
+          <h2 className="stat-title">
+            <Calculator size={15} style={{display:'inline',marginRight:6,color:'#60a5fa'}}/>
+            計算調整タグ
+          </h2>
+        </div>
+        <p className="combo-hint">
+          スコア合計の<strong>最後</strong>に掛け算・割り算を適用します。<br/>
+          <strong>デッキ全体</strong>: デッキ総合点に作用。&nbsp;
+          <strong>カード単体</strong>: そのカードの小計に作用。<br/>
+          複数設定した場合は上から順番に計算されます。÷0 は無視されます。
+        </p>
+
+        {/* Add adjuster form */}
+        <div className="combo-form glass-panel" style={{background:'rgba(0,0,0,.2)',gap:8}}>
+          <div className="adj-form-row">
+            <select className="combo-select" value={adj.opType}
+              onChange={e=>setAdj(p=>({...p,opType:e.target.value}))}>
+              {OP_TYPES.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+            <input type="number" className="score-input" placeholder="数値"
+              value={adj.value}
+              onChange={e=>setAdj(p=>({...p,value:e.target.value}))}
+              style={{width:80}}/>
+            <select className="combo-select" value={adj.scope}
+              onChange={e=>setAdj(p=>({...p,scope:e.target.value}))}>
+              {SCOPES.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+            </select>
+            <button className="deck-btn auto-btn" onClick={addAdj}
+              disabled={!adj.value||Number(adj.value)===0}>
+              <Plus size={13}/> 追加
+            </button>
+          </div>
+        </div>
+
+        {(!calcAdjusters||calcAdjusters.length===0)&&<p className="empty-msg">計算調整タグなし</p>}
+        <div className="combo-list">
+          {(calcAdjusters||[]).map((a,i)=>(
+            <div key={a.id} className="combo-item">
+              <div className="combo-tags">
+                <span className="adj-op-badge" style={{
+                  color: a.opType==='×'?'#60a5fa':'#c084fc',
+                  borderColor: a.opType==='×'?'rgba(96,165,250,.4)':'rgba(192,132,252,.4)',
+                }}>
+                  {a.opType} {a.value}
+                </span>
+                <span className="combo-scope-badge">{a.scope==='card'?'カード':'デッキ'}</span>
+              </div>
+              <div style={{display:'flex',gap:2}}>
+                <button className="btn-icon" onClick={()=>moveAdj(i,-1)} title="上へ"><ArrowUp size={12}/></button>
+                <button className="btn-icon" onClick={()=>moveAdj(i,1)}  title="下へ"><ArrowDown size={12}/></button>
+                <button className="btn-icon danger" onClick={()=>delAdj(a.id)}><Trash2 size={13}/></button>
+              </div>
             </div>
           ))}
         </div>

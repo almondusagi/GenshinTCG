@@ -8,7 +8,7 @@ import dbData from './data/cards_db.json';
 import defaultMetaDecks from './data/tournament_decks.json';
 import {calcDeckScore,getMetaAnalytics} from './utils/tagScoring';
 import {
-  loadTags,loadTagCombos,loadCardTags,loadGroups,
+  loadTags,loadTagCombos,loadCardTags,loadGroups,loadCalcAdjusters,
   loadMeta,saveMeta,clearMeta as clearMetaStorage,
   initDefaults
 } from './utils/storage';
@@ -29,6 +29,7 @@ export default function App(){
   const [tags,setTags]=useState([]);
   const [groups,setGroups]=useState([]);
   const [tagCombos,setCombos]=useState([]);
+  const [calcAdjusters,setCalcAdjusters]=useState([]);
   const [cardTags,setCardTags]=useState({});
   const [selectedChars,setChars]=useState([]);
   const [selectedActions,setActions]=useState([]);
@@ -36,26 +37,25 @@ export default function App(){
   useEffect(()=>{
     const c=dbData.cards;
     setCards(c);
-    // First-run: init defaults (sets groups, tags, card cost tags)
     initDefaults(c);
-    // Load from storage
     setGroups(loadGroups());
     setTags(loadTags());
     setCombos(loadTagCombos());
+    setCalcAdjusters(loadCalcAdjusters());
     setCardTags(loadCardTags());
     const saved=loadMeta();
     setMeta(saved??defaultMetaDecks);
   },[]);
 
-  const score=useMemo(()=>calcDeckScore(selectedChars,selectedActions,cardTags,tags,tagCombos),
-    [selectedChars,selectedActions,cardTags,tags,tagCombos]);
+  const score=useMemo(()=>
+    calcDeckScore(selectedChars,selectedActions,cardTags,tags,tagCombos,calcAdjusters),
+    [selectedChars,selectedActions,cardTags,tags,tagCombos,calcAdjusters]);
 
   const handleUpdateMeta=d=>{ const c=[...metaDecks,...d]; setMeta(c); saveMeta(c); };
   const handleClearMeta=()=>{ setMeta(defaultMetaDecks); clearMetaStorage(); };
 
   return(
     <div className="app-container">
-      {/* Desktop nav */}
       <nav className="glass-panel navbar desktop-nav">
         <div className="brand"><Swords size={24}/> GI-TCG Analyzer</div>
         <div className="nav-tabs">
@@ -67,7 +67,6 @@ export default function App(){
         </div>
       </nav>
 
-      {/* Mobile top bar */}
       <div className="mobile-topbar">
         <span className="brand"><Swords size={18}/> GI-TCG</span>
       </div>
@@ -77,15 +76,18 @@ export default function App(){
           <DeckBuilder cards={cards}
             selectedChars={selectedChars} setSelectedChars={setChars}
             selectedActions={selectedActions} setSelectedActions={setActions}
-            score={score} cardTags={cardTags} tags={tags} tagCombos={tagCombos}/>
+            score={score} cardTags={cardTags} tags={tags} tagCombos={tagCombos}
+            calcAdjusters={calcAdjusters}/>
         )}
         {activeTab==='review'&&(
           <CardReviewTable cards={cards} tags={tags} groups={groups}
-            cardTags={cardTags} setCardTags={setCardTags} tagCombos={tagCombos}/>
+            cardTags={cardTags} setCardTags={setCardTags}
+            tagCombos={tagCombos} calcAdjusters={calcAdjusters}/>
         )}
         {activeTab==='tags'&&(
           <TagManager tags={tags} setTags={setTags} groups={groups} setGroups={setGroups}
-            tagCombos={tagCombos} setTagCombos={setCombos}/>
+            tagCombos={tagCombos} setTagCombos={setCombos}
+            calcAdjusters={calcAdjusters} setCalcAdjusters={setCalcAdjusters}/>
         )}
         {activeTab==='analytics'&&(
           <Analytics metaDecks={metaDecks} cards={cards} analyticsData={getMetaAnalytics(metaDecks)}/>
@@ -95,7 +97,6 @@ export default function App(){
         )}
       </main>
 
-      {/* Mobile bottom nav */}
       <nav className="mobile-bottom-nav">
         {NAV.map(({id,label,Icon})=>(
           <button key={id} className={`mobile-nav-item ${activeTab===id?'active':''}`} onClick={()=>setTab(id)}>

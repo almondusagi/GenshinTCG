@@ -1,5 +1,6 @@
 const KEYS = {
   TAGS:'gcg_tags', GROUPS:'gcg_groups', TAG_COMBOS:'gcg_tag_combos',
+  CALC_ADJUSTERS:'gcg_calc_adjusters',
   CARD_TAGS:'gcg_card_tags', PRESETS:'gcg_presets',
   META:'genshin_tcg_meta', INITIALIZED:'gcg_initialized',
 };
@@ -12,6 +13,9 @@ export const loadTags=()=>load(KEYS.TAGS,[]);
 export const saveTags=v=>save(KEYS.TAGS,v);
 export const loadTagCombos=()=>load(KEYS.TAG_COMBOS,[]);
 export const saveTagCombos=v=>save(KEYS.TAG_COMBOS,v);
+// calcAdjusters: [{ id, opType:'×'|'÷', value:number, scope:'deck'|'card' }]
+export const loadCalcAdjusters=()=>load(KEYS.CALC_ADJUSTERS,[]);
+export const saveCalcAdjusters=v=>save(KEYS.CALC_ADJUSTERS,v);
 export const loadCardTags=()=>load(KEYS.CARD_TAGS,{});
 export const saveCardTags=v=>save(KEYS.CARD_TAGS,v);
 export const loadPresets=()=>load(KEYS.PRESETS,[]);
@@ -64,7 +68,12 @@ export function computeCostTags(card){
     for(let i=0;i<n;i++) result.push('コスト１');
   }
   if(result.length===0) return ['コスト０'];
-  if(total>=2&&hasNonVoid) result.push('同一');
+  // ── 同一タグはコスト１の個数と同じ数だけ付与 ──
+  // 例: 同一2コスト → コスト１×2 + 同一×2
+  // 無色コストは hasNonVoid=false なので同一タグは付与しない
+  if(total>=2&&hasNonVoid){
+    for(let i=0;i<total;i++) result.push('同一');
+  }
   return result;
 }
 
@@ -74,6 +83,7 @@ export function initDefaults(cards){
   saveGroups(DEFAULT_GROUPS);
   saveTags(DEFAULT_TAGS);
   saveTagCombos([]);
+  saveCalcAdjusters([]);
   const ct={};
   for(const [id,card] of Object.entries(cards)){
     const tags=computeCostTags(card);
@@ -86,8 +96,9 @@ export function initDefaults(cards){
 
 // ── Backup / Restore ──────────────────────────────────────────────────────────
 export function exportBackup(){
-  const data={version:1,exportedAt:new Date().toISOString(),
+  const data={version:2,exportedAt:new Date().toISOString(),
     groups:loadGroups(),tags:loadTags(),tagCombos:loadTagCombos(),
+    calcAdjusters:loadCalcAdjusters(),
     cardTags:loadCardTags(),presets:loadPresets()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -98,10 +109,11 @@ export function exportBackup(){
 export function importBackup(text){
   const d=JSON.parse(text);
   if(!d.version) throw new Error('不正なファイルです');
-  if(d.groups)    saveGroups(d.groups);
-  if(d.tags)      saveTags(d.tags);
-  if(d.tagCombos) saveTagCombos(d.tagCombos);
-  if(d.cardTags)  saveCardTags(d.cardTags);
-  if(d.presets)   savePresets(d.presets);
+  if(d.groups)         saveGroups(d.groups);
+  if(d.tags)           saveTags(d.tags);
+  if(d.tagCombos)      saveTagCombos(d.tagCombos);
+  if(d.calcAdjusters)  saveCalcAdjusters(d.calcAdjusters);
+  if(d.cardTags)       saveCardTags(d.cardTags);
+  if(d.presets)        savePresets(d.presets);
   return d;
 }

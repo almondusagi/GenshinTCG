@@ -124,7 +124,7 @@ function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onTogg
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,tagCombos}){
+export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,tagCombos,calcAdjusters=[]}){
   const [typeFilter,setTF]=useState('all');
   const [search,setSearch]=useState('');
   const [page,setPage]=useState(0);
@@ -174,7 +174,7 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
     });
   },[tags]);
 
-  const score=id=>calcCardScore(id,cardTags,tags,tagCombos);
+  const score=id=>calcCardScore(id,cardTags,tags,tagCombos,calcAdjusters);
 
   return(
     <div className="review-layout">
