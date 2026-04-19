@@ -27,7 +27,6 @@ const TagRow = React.memo(({tag, idx, groups, updateTagGroup, getScoreDisplay, h
     <div className="tag-score-area">
       <input
         type="text"
-        inputMode="numeric"
         className="score-input"
         placeholder="0"
         value={getScoreDisplay(tag.id)}
@@ -197,7 +196,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         <div className="tag-add-row">
           <input className="search-input" placeholder="タグ名" value={newTagName}
             onChange={e=>setNTN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()}/>
-          <input type="number" className="score-input" placeholder="0" value={newTagScore}
+          <input type="text" className="score-input" placeholder="0" value={newTagScore}
             onChange={e=>setNTS(e.target.value)}/>
           <select className="combo-select" value={newTagGroup} onChange={e=>setNTG(e.target.value)}>
             <option value="">グループなし</option>
@@ -300,7 +299,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
               {tagNames.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             <label className="combo-label">スコア</label>
-            <input type="number" className="score-input combo-score" placeholder="0"
+            <input type="text" className="score-input combo-score" placeholder="0"
               value={combo.overrideScore}
               onChange={e=>setCombo(p=>({...p,overrideScore:e.target.value}))}/>
             <label className="combo-label">適用範囲</label>
