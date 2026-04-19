@@ -10,43 +10,7 @@ const SCOPES=[{v:'deck',l:'デッキ全体'},{v:'card',l:'カード単体'}];
 // Stored score is always a number. Display uses '' for 0 (cleaner UI).
 // Number('') === 0, so empty input === score 0 in all calculations.
 const toDisplay = v => (v === 0 || v === null || v === undefined) ? '' : String(v);
-const fromInput  = s => (s === '' || s === '-') ? 0 : Number(s);
-
-// ── TagRow Component (Extracted) ──────────────────────────────────────────────
-const TagRow = React.memo(({tag, idx, groups, updateTagGroup, getScoreDisplay, handleScoreInput, moveTag, delTag}) => (
-  <div className="tag-row">
-    <div className="tag-row-left">
-      <span className="tag-pill">{tag.name}</span>
-      <select className="combo-select" style={{fontSize:'.72rem',padding:'3px 6px',maxWidth:90}}
-        value={tag.groupId||''}
-        onChange={e=>updateTagGroup(tag.id,e.target.value)}>
-        <option value="">グループなし</option>
-        {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
-      </select>
-    </div>
-    <div className="tag-score-area">
-      <input
-        type="text"
-        className="score-input"
-        placeholder="0"
-        value={getScoreDisplay(tag.id)}
-        onChange={e=>handleScoreInput(tag.id,e.target.value)}
-      />
-      {/* Show preview only when there's an actual non-zero value */}
-      {(Number(getScoreDisplay(tag.id))||0)!==0&&(
-        <span className="score-preview"
-          style={{color:(Number(getScoreDisplay(tag.id))||0)>0?'#34d399':'#f87171'}}>
-          {(Number(getScoreDisplay(tag.id))||0)>0?`+${Number(getScoreDisplay(tag.id))||0}`:Number(getScoreDisplay(tag.id))||0}
-        </span>
-      )}
-    </div>
-    <div style={{display:'flex',gap:2}}>
-      <button className="btn-icon" onClick={()=>moveTag(idx,-1)} title="上へ"><ArrowUp size={12}/></button>
-      <button className="btn-icon" onClick={()=>moveTag(idx,1)}  title="下へ"><ArrowDown size={12}/></button>
-      <button className="btn-icon danger" onClick={()=>delTag(tag.id)}><Trash2 size={13}/></button>
-    </div>
-  </div>
-));
+const fromInput  = s => s === '' ? 0 : Number(s);
 
 export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos}){
   const [newTagName,setNTN]=useState('');
@@ -176,10 +140,44 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
     }catch(e){ setBackupMsg('❌ '+e.message); }
   };
 
-
   // Render tag rows grouped
   const ungrouped=tags.filter(t=>!t.groupId);
   const getGroupTags=gid=>tags.filter(t=>t.groupId===gid);
+
+  const TagRow=({tag,idx})=>(
+    <div className="tag-row">
+      <div className="tag-row-left">
+        <span className="tag-pill">{tag.name}</span>
+        <select className="combo-select" style={{fontSize:'.72rem',padding:'3px 6px',maxWidth:90}}
+          value={tag.groupId||''}
+          onChange={e=>updateTagGroup(tag.id,e.target.value)}>
+          <option value="">グループなし</option>
+          {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      </div>
+      <div className="tag-score-area">
+        <input
+          type="number"
+          className="score-input"
+          placeholder="0"
+          value={getScoreDisplay(tag.id)}
+          onChange={e=>handleScoreInput(tag.id,e.target.value)}
+        />
+        {/* Show preview only when there's an actual non-zero value */}
+        {(Number(getScoreDisplay(tag.id))||0)!==0&&(
+          <span className="score-preview"
+            style={{color:(Number(getScoreDisplay(tag.id))||0)>0?'#34d399':'#f87171'}}>
+            {(Number(getScoreDisplay(tag.id))||0)>0?`+${Number(getScoreDisplay(tag.id))||0}`:Number(getScoreDisplay(tag.id))||0}
+          </span>
+        )}
+      </div>
+      <div style={{display:'flex',gap:2}}>
+        <button className="btn-icon" onClick={()=>moveTag(idx,-1)} title="上へ"><ArrowUp size={12}/></button>
+        <button className="btn-icon" onClick={()=>moveTag(idx,1)}  title="下へ"><ArrowDown size={12}/></button>
+        <button className="btn-icon danger" onClick={()=>delTag(tag.id)}><Trash2 size={13}/></button>
+      </div>
+    </div>
+  );
 
   return(
     <div className="tagmgr-layout">
@@ -196,7 +194,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         <div className="tag-add-row">
           <input className="search-input" placeholder="タグ名" value={newTagName}
             onChange={e=>setNTN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()}/>
-          <input type="text" className="score-input" placeholder="0" value={newTagScore}
+          <input type="number" className="score-input" placeholder="0" value={newTagScore}
             onChange={e=>setNTS(e.target.value)}/>
           <select className="combo-select" value={newTagGroup} onChange={e=>setNTG(e.target.value)}>
             <option value="">グループなし</option>
@@ -221,19 +219,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
                   <button className="btn-icon danger" onClick={()=>delGroup(g.id)}><Trash2 size={12}/></button>
                 </div>
               </div>
-              {gTags.map(tag=>(
-                <TagRow
-                  key={tag.id}
-                  tag={tag}
-                  idx={tags.indexOf(tag)}
-                  groups={groups}
-                  updateTagGroup={updateTagGroup}
-                  getScoreDisplay={getScoreDisplay}
-                  handleScoreInput={handleScoreInput}
-                  moveTag={moveTag}
-                  delTag={delTag}
-                />
-              ))}
+              {gTags.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}/>)}
             </div>
           );
         })}
@@ -244,19 +230,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
             <div className="tag-group-header">
               <span className="tag-group-name" style={{color:'#64748b'}}>グループなし</span>
             </div>
-            {ungrouped.map(tag=>(
-              <TagRow
-                key={tag.id}
-                tag={tag}
-                idx={tags.indexOf(tag)}
-                groups={groups}
-                updateTagGroup={updateTagGroup}
-                getScoreDisplay={getScoreDisplay}
-                handleScoreInput={handleScoreInput}
-                moveTag={moveTag}
-                delTag={delTag}
-              />
-            ))}
+            {ungrouped.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}/>)}
           </div>
         )}
 
@@ -299,7 +273,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
               {tagNames.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             <label className="combo-label">スコア</label>
-            <input type="text" className="score-input combo-score" placeholder="0"
+            <input type="number" className="score-input combo-score" placeholder="0"
               value={combo.overrideScore}
               onChange={e=>setCombo(p=>({...p,overrideScore:e.target.value}))}/>
             <label className="combo-label">適用範囲</label>
