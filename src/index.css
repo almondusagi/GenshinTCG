@@ -74,7 +74,7 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .tcg-card.selected{border-color:var(--primary);box-shadow:0 0 8px rgba(79,70,229,.4);}
 .tcg-card.maxed{opacity:.4;}
 .card-elem-strip{position:absolute;top:0;left:0;right:0;height:2px;opacity:.8;}
-.card-img{width:100%;aspect-ratio:5/8;border-radius:4px;object-fit:cover;background:#1e293b;display:block;}
+.card-img{width:100%;aspect-ratio:7/12;border-radius:4px;object-fit:contain;background:#1e293b;display:block;}
 .card-name{font-size:.68rem;text-align:center;font-weight:500;width:100%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-badge{position:absolute;top:-4px;right:-4px;background:var(--gold);color:#000;
@@ -122,12 +122,12 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .deck-section-title{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);
   margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;}
 .deck-slots.chars{display:flex;gap:6px;}
-.deck-slot{flex:1;aspect-ratio:5/8;border-radius:7px;position:relative;overflow:hidden;cursor:pointer;}
+.deck-slot{flex:1;aspect-ratio:7/12;border-radius:7px;position:relative;overflow:hidden;cursor:pointer;}
 .deck-slot.empty{border:2px dashed rgba(255,255,255,.12);display:flex;flex-direction:column;
   align-items:center;justify-content:center;color:rgba(255,255,255,.15);font-size:1.3rem;gap:3px;}
 .deck-slot.empty small{font-size:.6rem;color:var(--muted);}
 .deck-slot.filled{border:2px solid;}
-.deck-slot.filled img{width:100%;height:100%;object-fit:cover;display:block;}
+.deck-slot.filled img{width:100%;height:100%;object-fit:contain;display:block;}
 .slot-overlay{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));
   padding:3px 4px 4px;display:flex;flex-direction:column;align-items:center;gap:1px;}
 .slot-name{font-size:.6rem;font-weight:600;text-align:center;color:#fff;line-height:1.2;}
@@ -304,7 +304,7 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .review-card-cell.tagged{border-color:rgba(99,102,241,.4);}
 .review-card-cell.editing{border-color:var(--gold);box-shadow:0 0 10px rgba(251,191,36,.25);}
 .rc-elem-strip{position:absolute;top:0;left:0;right:0;height:2px;border-radius:4px 4px 0 0;}
-.rc-img{width:100%;aspect-ratio:5/8;border-radius:4px;object-fit:cover;background:#1e293b;margin-top:2px;}
+.rc-img{width:100%;aspect-ratio:7/12;border-radius:4px;object-fit:contain;background:#1e293b;margin-top:2px;}
 .rc-info{display:flex;flex-direction:column;gap:1px;}
 .rc-name{font-size:.68rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rc-type{font-size:.62rem;font-weight:600;}
@@ -370,8 +370,8 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
     -webkit-tap-highlight-color:transparent;}
   .mobile-nav-item.active{color:var(--gold);}
   .card-pool,.deck-area{flex:1;min-height:0;max-width:100%;width:100%;}
-  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(65px,1fr));}
-  .review-card-grid{grid-template-columns:repeat(auto-fill,minmax(75px,1fr));}
+  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(85px,1fr));}
+  .review-card-grid{grid-template-columns:repeat(auto-fill,minmax(95px,1fr));}
   .filter-btn{padding:6px 9px;min-height:34px;}
   .score-value{font-size:1.7rem;}
   /* Tooltip off on touch */
@@ -381,6 +381,6 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 }
 
 @media (max-width:400px){
-  .cards-grid{grid-template-columns:repeat(3,1fr);}
-  .review-card-grid{grid-template-columns:repeat(3,1fr);}
+  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));}
+  .review-card-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));}
 }
