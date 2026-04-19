@@ -12,7 +12,8 @@ const PAGE_SIZE=40;
 // ── Fixed tag picker overlay ──────────────────────────────────────────────────
 function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onToggle}){
   const ref=useRef(null);
-  // Clamp to viewport
+
+  // Clamp to viewport after render
   useEffect(()=>{
     if(!ref.current) return;
     const el=ref.current;
@@ -24,12 +25,10 @@ function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onTogg
     el.style.left=left+'px'; el.style.top=top+'px';
   },[position]);
 
-  // Close on outside click
-  useEffect(()=>{
-    const h=e=>{ if(ref.current&&!ref.current.contains(e.target)) onClose(); };
-    setTimeout(()=>document.addEventListener('mousedown',h),0);
-    return()=>document.removeEventListener('mousedown',h);
-  },[onClose]);
+  // ── NO document event listener ──
+  // Closing is handled by the backdrop div rendered below.
+  // This fixes the mobile issue where mousedown fired during keyboard open/close
+  // and closed the picker unexpectedly.
 
   const [collapsed,setCollapsed]=useState({});
   const toggleCollapse=gid=>setCollapsed(p=>({...p,[gid]:!p[gid]}));
@@ -54,6 +53,8 @@ function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onTogg
   const renderTagBtn=(tag)=>{
     const cnt=countMap[tag.name]||0;
     const isLocked=tag.groupId&&groupLock[tag.groupId]&&groupLock[tag.groupId]!==tag.name;
+    // Show score only when non-zero (handles null/0/empty all as "no display")
+    const scoreNum=Number(tag.score)||0;
     return(
       <button key={tag.id}
         className={`tag-toggle-btn ${cnt>0?'on':''} ${isLocked?'locked':''}`}
@@ -62,49 +63,63 @@ function TagPickerOverlay({cardId,cardTagArr,tags,groups,position,onClose,onTogg
         onContextMenu={e=>{e.preventDefault();onToggle(cardId,tag.name,'remove');}}>
         {tag.name}
         {cnt>0&&<span className="tag-cnt-badge">×{cnt}</span>}
-        <span className="tag-score-hint" style={{color:tag.score>0?'#34d399':tag.score<0?'#f87171':'#64748b'}}>
-          {tag.score>0?`+${tag.score}`:tag.score}
-        </span>
+        {scoreNum!==0&&(
+          <span className="tag-score-hint" style={{color:scoreNum>0?'#34d399':'#f87171'}}>
+            {scoreNum>0?`+${scoreNum}`:scoreNum}
+          </span>
+        )}
       </button>
     );
   };
 
   const ungrouped=tags.filter(t=>!t.groupId);
 
+  // Backdrop + picker rendered together.
+  // The backdrop (z-index 9999) covers the whole screen and calls onClose on any tap/click.
+  // The picker (z-index 10000) is above the backdrop, so interactions inside DON'T reach the backdrop.
+  // This is reliable on both desktop and mobile — no mousedown/touchstart event timing issues.
   return(
-    <div ref={ref} className="tag-picker-fixed" style={{left:position.left,top:position.top}}>
-      <div className="tag-picker-header">
-        <span>タグを選択（右クリックで削除）</span>
-        <button className="btn-icon" onClick={onClose}><X size={13}/></button>
-      </div>
-      {tags.length===0&&<p className="empty-msg" style={{padding:'6px 0'}}>先に「タグ管理」でタグを作成</p>}
-
-      {groups.map(g=>{
-        const gTags=tags.filter(t=>t.groupId===g.id);
-        if(!gTags.length) return null;
-        const isOpen=!collapsed[g.id];
-        return(
-          <div key={g.id} className="picker-group">
-            <button className="picker-group-hd" onClick={()=>toggleCollapse(g.id)}>
-              {isOpen?<ChevronDown size={12}/>:<CR size={12}/>}
-              {g.name}
-              {groupLock[g.id]&&<span className="tag-pill" style={{marginLeft:4,fontSize:'.65rem'}}>{groupLock[g.id]}</span>}
-            </button>
-            {isOpen&&<div className="tag-picker-list">{gTags.map(renderTagBtn)}</div>}
-          </div>
-        );
-      })}
-
-      {ungrouped.length>0&&(
-        <div className="picker-group">
-          <button className="picker-group-hd" onClick={()=>toggleCollapse('__ug')}>
-            {!collapsed['__ug']?<ChevronDown size={12}/>:<CR size={12}/>}
-            グループなし
-          </button>
-          {!collapsed['__ug']&&<div className="tag-picker-list">{ungrouped.map(renderTagBtn)}</div>}
+    <>
+      {/* Transparent backdrop — tapping anywhere outside picker closes it */}
+      <div
+        className="picker-backdrop"
+        onClick={onClose}
+        onTouchStart={e=>{ e.preventDefault(); onClose(); }}
+      />
+      <div ref={ref} className="tag-picker-fixed" style={{left:position.left,top:position.top}}>
+        <div className="tag-picker-header">
+          <span>タグを選択（長押し/右クリックで削除）</span>
+          <button className="btn-icon" onClick={onClose}><X size={13}/></button>
         </div>
-      )}
-    </div>
+        {tags.length===0&&<p className="empty-msg" style={{padding:'6px 0'}}>先に「タグ管理」でタグを作成</p>}
+
+        {groups.map(g=>{
+          const gTags=tags.filter(t=>t.groupId===g.id);
+          if(!gTags.length) return null;
+          const isOpen=!collapsed[g.id];
+          return(
+            <div key={g.id} className="picker-group">
+              <button className="picker-group-hd" onClick={()=>toggleCollapse(g.id)}>
+                {isOpen?<ChevronDown size={12}/>:<CR size={12}/>}
+                {g.name}
+                {groupLock[g.id]&&<span className="tag-pill" style={{marginLeft:4,fontSize:'.65rem'}}>{groupLock[g.id]}</span>}
+              </button>
+              {isOpen&&<div className="tag-picker-list">{gTags.map(renderTagBtn)}</div>}
+            </div>
+          );
+        })}
+
+        {ungrouped.length>0&&(
+          <div className="picker-group">
+            <button className="picker-group-hd" onClick={()=>toggleCollapse('__ug')}>
+              {!collapsed['__ug']?<ChevronDown size={12}/>:<CR size={12}/>}
+              グループなし
+            </button>
+            {!collapsed['__ug']&&<div className="tag-picker-list">{ungrouped.map(renderTagBtn)}</div>}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

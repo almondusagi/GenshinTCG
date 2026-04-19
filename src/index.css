@@ -209,6 +209,15 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .tag-pill.target{background:rgba(52,211,153,.12);color:#34d399;border-color:rgba(52,211,153,.3);}
 
 /* ── Tag Picker (fixed overlay) ───────────────────────────────────────────── */
+/* Backdrop: sits below the picker and captures any tap/click outside it */
+.picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;      /* just below picker (10000) */
+  background: transparent;
+  cursor: default;
+  /* No visual effect — purely captures pointer events */
+}
 .tag-picker-fixed{
   position:fixed;z-index:10000;
   width:clamp(220px,60vw,360px);

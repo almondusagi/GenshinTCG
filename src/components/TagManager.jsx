@@ -1,4 +1,4 @@
-import React,{useState} from 'react';
+import React,{useState,useEffect} from 'react';
 import {Plus,Trash2,Zap,Save,ArrowUp,ArrowDown,Download,Upload,Tag,Layers} from 'lucide-react';
 import {saveTags,saveTagCombos,saveGroups,exportBackup,importBackup,
   loadTags,loadTagCombos,loadGroups,loadCardTags,loadPresets} from '../utils/storage';
@@ -6,15 +6,54 @@ import {saveTags,saveTagCombos,saveGroups,exportBackup,importBackup,
 const genId=()=>Math.random().toString(36).slice(2,9);
 const SCOPES=[{v:'deck',l:'デッキ全体'},{v:'card',l:'カード単体'}];
 
+// ── Score display helpers ──────────────────────────────────────────────────────
+// Stored score is always a number. Display uses '' for 0 (cleaner UI).
+// Number('') === 0, so empty input === score 0 in all calculations.
+const toDisplay = v => (v === 0 || v === null || v === undefined) ? '' : String(v);
+const fromInput  = s => s === '' ? 0 : Number(s);
+
 export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos}){
   const [newTagName,setNTN]=useState('');
-  const [newTagScore,setNTS]=useState(0);
+  // New tag score: '' = 0
+  const [newTagScore,setNTS]=useState('');
   const [newTagGroup,setNTG]=useState('');
   const [newGroupName,setNGN]=useState('');
-  const [combo,setCombo]=useState({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:0,scope:'deck'});
+  // Combo override score: '' = 0
+  const [combo,setCombo]=useState({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:'',scope:'deck'});
   const [saved,setSaved]=useState(false);
   const [backupText,setBackupText]=useState('');
   const [backupMsg,setBackupMsg]=useState('');
+
+  // ── Local string state for score inputs per tag id ────────────────────────────
+  // Key: tag.id  Value: string ('' means 0, '5' means 5, '-3' means -3)
+  // This prevents re-render loops on mobile when parent setTags triggers re-render.
+  const [scoreInputs,setScoreInputs]=useState(()=>{
+    const m={};
+    for(const t of tags) m[t.id]=toDisplay(t.score);
+    return m;
+  });
+
+  // Sync new tags added from outside (e.g., after backup import) without overwriting current input
+  useEffect(()=>{
+    setScoreInputs(prev=>{
+      const m={};
+      for(const t of tags){
+        // Keep existing display value if user has already typed something;
+        // otherwise initialise from stored score ('' for 0, digits for non-zero)
+        m[t.id]=(t.id in prev) ? prev[t.id] : toDisplay(t.score);
+      }
+      return m;
+    });
+  },[tags]);
+
+  const getScoreDisplay = id => scoreInputs[id] ?? '';
+  const handleScoreInput = (id, raw) => {
+    // Update display string immediately (no re-render lag on mobile)
+    setScoreInputs(p=>({...p,[id]:raw}));
+    // Sync numeric value to tag store ('' → 0, '5' → 5, etc.)
+    updateTagScore(id, fromInput(raw));
+  };
+
   const tagNames=tags.map(t=>t.name);
 
   // ── Group actions ────────────────────────────────────────────────────────────
@@ -40,8 +79,13 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   // ── Tag actions ──────────────────────────────────────────────────────────────
   const addTag=()=>{
     const n=newTagName.trim(); if(!n||tags.some(t=>t.name===n)) return;
-    const updated=[...tags,{id:genId(),name:n,score:Number(newTagScore),groupId:newTagGroup||null}];
-    setTags(updated); saveTags(updated); setNTN(''); setNTS(0); setNGN('');
+    const newId=genId();
+    const newScore=fromInput(newTagScore);
+    const updated=[...tags,{id:newId,name:n,score:newScore,groupId:newTagGroup||null}];
+    setTags(updated); saveTags(updated);
+    // New tag display: '' (score 0) or actual value
+    setScoreInputs(p=>({...p,[newId]:toDisplay(newScore)}));
+    setNTN(''); setNTS(''); setNGN('');
   };
   const updateTagScore=(id,v)=>{
     setTags(tags.map(t=>t.id===id?{...t,score:Number(v)}:t));
@@ -68,9 +112,10 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const addCombo=()=>{
     const{triggerTag,conditionTag,targetTag,overrideScore,scope}=combo;
     if(!triggerTag||!conditionTag||!targetTag) return;
-    const updated=[...tagCombos,{id:genId(),triggerTag,conditionTag,targetTag,overrideScore:Number(overrideScore),scope}];
+    const updated=[...tagCombos,{id:genId(),triggerTag,conditionTag,targetTag,
+      overrideScore:fromInput(overrideScore),scope}];
     setTagCombos(updated); saveTagCombos(updated);
-    setCombo({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:0,scope:'deck'});
+    setCombo({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:'',scope:'deck'});
   };
   const delCombo=id=>{
     const updated=tagCombos.filter(c=>c.id!==id);
@@ -83,7 +128,13 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
     try{
       const d=importBackup(backupText);
       if(d.groups)    setGroups(d.groups);
-      if(d.tags)      setTags(d.tags);
+      if(d.tags){
+        setTags(d.tags);
+        // Reset score display after restore so new values show correctly
+        const m={};
+        for(const t of d.tags) m[t.id]=toDisplay(t.score);
+        setScoreInputs(m);
+      }
       if(d.tagCombos) setTagCombos(d.tagCombos);
       setBackupText(''); setBackupMsg('✓ 復元しました'); setTimeout(()=>setBackupMsg(''),3000);
     }catch(e){ setBackupMsg('❌ '+e.message); }
@@ -105,11 +156,20 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         </select>
       </div>
       <div className="tag-score-area">
-        <input type="number" className="score-input" value={tag.score}
-          onChange={e=>updateTagScore(tag.id,e.target.value)}/>
-        <span className="score-preview" style={{color:tag.score>0?'#34d399':tag.score<0?'#f87171':'#64748b'}}>
-          {tag.score>0?`+${tag.score}`:tag.score}
-        </span>
+        <input
+          type="number"
+          className="score-input"
+          placeholder="0"
+          value={getScoreDisplay(tag.id)}
+          onChange={e=>handleScoreInput(tag.id,e.target.value)}
+        />
+        {/* Show preview only when there's an actual non-zero value */}
+        {(Number(getScoreDisplay(tag.id))||0)!==0&&(
+          <span className="score-preview"
+            style={{color:(Number(getScoreDisplay(tag.id))||0)>0?'#34d399':'#f87171'}}>
+            {(Number(getScoreDisplay(tag.id))||0)>0?`+${Number(getScoreDisplay(tag.id))||0}`:Number(getScoreDisplay(tag.id))||0}
+          </span>
+        )}
       </div>
       <div style={{display:'flex',gap:2}}>
         <button className="btn-icon" onClick={()=>moveTag(idx,-1)} title="上へ"><ArrowUp size={12}/></button>
@@ -134,8 +194,8 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         <div className="tag-add-row">
           <input className="search-input" placeholder="タグ名" value={newTagName}
             onChange={e=>setNTN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()}/>
-          <input type="number" className="score-input" value={newTagScore}
-            onChange={e=>setNTS(e.target.value)} placeholder="0"/>
+          <input type="number" className="score-input" placeholder="0" value={newTagScore}
+            onChange={e=>setNTS(e.target.value)}/>
           <select className="combo-select" value={newTagGroup} onChange={e=>setNTG(e.target.value)}>
             <option value="">グループなし</option>
             {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
@@ -213,7 +273,8 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
               {tagNames.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             <label className="combo-label">スコア</label>
-            <input type="number" className="score-input combo-score" value={combo.overrideScore}
+            <input type="number" className="score-input combo-score" placeholder="0"
+              value={combo.overrideScore}
               onChange={e=>setCombo(p=>({...p,overrideScore:e.target.value}))}/>
             <label className="combo-label">適用範囲</label>
             <select className="combo-select" value={combo.scope}
