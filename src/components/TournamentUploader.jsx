@@ -1,17 +1,42 @@
 import React,{useState} from 'react';
 import {Upload,Trash2,Database} from 'lucide-react';
+
+// Converts backup format presets to meta deck format
+function presetsToMetaDecks(presets){
+  return presets.map(p=>({
+    id:p.id,
+    name:p.name,
+    characters:p.characters||p.chars||[],
+    actions:p.actions||[],
+    source:'プリセットから',
+    score:p.score,
+  }));
+}
+
 export default function TournamentUploader({metaDecks,onUpdateMeta,onClearMeta}){
-  const[txt,setT]=useState('');
-  const[err,setE]=useState('');
-  const[ok,setOk]=useState('');
+  const [txt,setT]=useState('');
+  const [err,setE]=useState('');
+  const [ok,setOk]=useState('');
+
   const imp=()=>{
     setE('');setOk('');
     try{
-      const p=JSON.parse(txt);
-      const d=Array.isArray(p)?p:[p];
-      onUpdateMeta(d);setOk(`${d.length}件追加`);setT('');
-    }catch(e){setE('JSONエラー:'+e.message);}
+      const parsed=JSON.parse(txt);
+      // Detect backup format (has 'version' key)
+      if(parsed.version&&parsed.presets){
+        const decks=presetsToMetaDecks(parsed.presets);
+        onUpdateMeta(decks);
+        setOk(`バックアップからプリセット ${decks.length} 件をインポートしました`);
+        setT('');return;
+      }
+      // Standard tournament array format
+      const decks=Array.isArray(parsed)?parsed:[parsed];
+      onUpdateMeta(decks);
+      setOk(`${decks.length}件追加`);
+      setT('');
+    }catch(e){setE('JSONエラー: '+e.message);}
   };
+
   return(
     <div className="data-view">
       <div className="glass-panel stat-card">
@@ -30,7 +55,11 @@ export default function TournamentUploader({metaDecks,onUpdateMeta,onClearMeta})
       </div>
       <div className="glass-panel stat-card">
         <h3 className="stat-title"><Upload size={15} style={{display:'inline',marginRight:6}}/>インポート</h3>
-        <pre className="format-hint">{`[{"id":"d1","name":"デッキ名","characters":["1101","1201","1301"],"actions":["211011","211011",...]}]`}</pre>
+        <p className="combo-hint" style={{marginBottom:8}}>
+          通常の大会データJSON、またはタグ管理のバックアップJSONをそのまま貼り付けられます。<br/>
+          バックアップの場合はプリセットデッキをメタデッキとして登録します。
+        </p>
+        <pre className="format-hint">{`// 通常形式\n[{"id":"d1","name":"デッキ名","characters":["1101","1201","1301"],"actions":["211011",...]}]\n// バックアップ形式も対応（version キーあり）`}</pre>
         <textarea className="json-textarea" rows={6} placeholder="JSONを貼り付け..." value={txt} onChange={e=>setT(e.target.value)}/>
         {err&&<p className="import-error">{err}</p>}
         {ok&&<p className="import-success">{ok}</p>}

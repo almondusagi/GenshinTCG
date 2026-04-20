@@ -1,9 +1,16 @@
-// cardTags      = { [cardId]: string[] }  (duplicates allowed)
-// tags          = [{ id, name, score, groupId }]
-// tagCombos     = [{ id, triggerTag, conditionTag, targetTag, overrideScore, scope:'deck'|'card' }]
+// cardTags = { [cardId]: string[] }  duplicates allowed, may contain 'adj:{id}' entries
+// tags      = [{ id, name, score, groupId }]
+// tagCombos = [{ id, triggerTag, conditionTag, targetTag, overrideScore, scope }]
 // calcAdjusters = [{ id, opType:'×'|'÷', value:number, scope:'deck'|'card' }]
-//   card scope  → applied to each card's subtotal (after card-local combos)
-//   deck scope  → applied to whole deck total (after deck-wide combos)
+
+// adj: tags are stored as 'adj:{adjId}' in cardTags.
+// Card-scope adjusters apply to each card's subtotal.
+// Deck-scope adjusters from ALL cards in deck apply to final deck total.
+
+export const ADJ_PREFIX='adj:';
+export const adjTagKey=id=>`${ADJ_PREFIX}${id}`;
+export const isAdjTag=t=>t.startsWith(ADJ_PREFIX);
+export const adjIdFromTag=t=>t.slice(ADJ_PREFIX.length);
 
 function buildScoreMap(tags){
   const m={};
@@ -11,66 +18,72 @@ function buildScoreMap(tags){
   return m;
 }
 
-function applyCombos(effectiveScores, tagSet, combos){
+function applyCombos(eff,tagSet,combos){
   for(const c of combos){
-    if(tagSet.has(c.triggerTag)&&tagSet.has(c.conditionTag)){
-      effectiveScores[c.targetTag]=c.overrideScore;
-    }
+    if(tagSet.has(c.triggerTag)&&tagSet.has(c.conditionTag))
+      eff[c.targetTag]=c.overrideScore;
   }
 }
 
-// Apply ×/÷ adjusters to a running total. Returns rounded-to-2dp float.
-function applyAdjusters(score, adjusters, scope){
-  const list=(adjusters||[]).filter(a=>a.scope===scope);
+// Apply ordered ×/÷ operations to a running total
+function applyAdjList(score,adjs){
   let v=score;
-  for(const a of list){
+  for(const a of adjs){
     const n=Number(a.value);
     if(a.opType==='×') v=v*n;
-    else if(a.opType==='÷' && n!==0) v=v/n;
+    else if(a.opType==='÷'&&n!==0) v=v/n;
   }
-  // Round to avoid floating-point noise, keep up to 2 decimal places
   return Math.round(v*100)/100;
 }
 
-// ── Card score (card-local combos + card-scoped adjusters) ────────────────────
-export function calcCardScore(cardId, cardTags, tags, tagCombos=[], calcAdjusters=[]){
-  const myTags=cardTags[cardId]||[];
-  const myTagSet=new Set(myTags);
-  const eff={...buildScoreMap(tags)};
-  const localCombos=tagCombos.filter(c=>c.scope==='card');
-  applyCombos(eff, myTagSet, localCombos);
-  const subtotal=myTags.reduce((s,n)=>s+(eff[n]??0),0);
-  return applyAdjusters(subtotal, calcAdjusters, 'card');
+// Resolve adj: tag strings to adjuster objects for a given scope
+function resolveAdjs(adjTags,calcAdjusters,scope){
+  return adjTags
+    .map(t=>calcAdjusters?.find(a=>a.id===adjIdFromTag(t)))
+    .filter(a=>a&&a.scope===scope);
 }
 
-// ── Deck score (deck-wide combos + deck-scoped adjusters) ─────────────────────
-export function calcDeckScore(chars, actions, cardTags, tags, tagCombos=[], calcAdjusters=[]){
+// ── Card score ────────────────────────────────────────────────────────────────
+export function calcCardScore(cardId,cardTags,tags,tagCombos=[],calcAdjusters=[]){
+  const all=cardTags[cardId]||[];
+  const regular=all.filter(t=>!isAdjTag(t));
+  const adjTags=all.filter(isAdjTag);
+
+  const tagSet=new Set(regular);
+  const eff={...buildScoreMap(tags)};
+  applyCombos(eff,tagSet,tagCombos.filter(c=>c.scope==='card'));
+  const subtotal=regular.reduce((s,n)=>s+(eff[n]??0),0);
+
+  // Apply card-scoped adjusters assigned to this card
+  const cardAdjs=resolveAdjs(adjTags,calcAdjusters,'card');
+  return cardAdjs.length?applyAdjList(subtotal,cardAdjs):subtotal;
+}
+
+// ── Deck score ────────────────────────────────────────────────────────────────
+export function calcDeckScore(chars,actions,cardTags,tags,tagCombos=[],calcAdjusters=[]){
   const allIds=[...chars,...actions];
-  const allInstances=allIds.flatMap(id=>cardTags[id]||[]);
-  const deckTagSet=new Set(allInstances);
+  const allTags=allIds.flatMap(id=>cardTags[id]||[]);
+  const regular=allTags.filter(t=>!isAdjTag(t));
+  const adjTags=allTags.filter(isAdjTag);
+
+  const deckTagSet=new Set(regular);
   const eff={...buildScoreMap(tags)};
-  const deckCombos=tagCombos.filter(c=>c.scope==='deck'||!c.scope);
-  applyCombos(eff, deckTagSet, deckCombos);
-  const subtotal=allInstances.reduce((s,n)=>s+(eff[n]??0),0);
-  return applyAdjusters(subtotal, calcAdjusters, 'deck');
+  applyCombos(eff,deckTagSet,tagCombos.filter(c=>c.scope==='deck'||!c.scope));
+  const subtotal=regular.reduce((s,n)=>s+(eff[n]??0),0);
+
+  // Apply deck-scoped adjusters from all cards (each instance counts)
+  const deckAdjs=resolveAdjs(adjTags,calcAdjusters,'deck');
+  return deckAdjs.length?applyAdjList(subtotal,deckAdjs):subtotal;
 }
 
-// ── Active deck-wide combo details (for UI display) ───────────────────────────
-export function getActiveComboDetails(chars, actions, cardTags, tags, tagCombos=[]){
-  const allInstances=[...chars,...actions].flatMap(id=>cardTags[id]||[]);
-  const deckTagSet=new Set(allInstances);
+// ── Active deck combo details ─────────────────────────────────────────────────
+export function getActiveComboDetails(chars,actions,cardTags,tags,tagCombos=[]){
+  const regular=[...chars,...actions].flatMap(id=>(cardTags[id]||[]).filter(t=>!isAdjTag(t)));
+  const deckTagSet=new Set(regular);
   const base=buildScoreMap(tags);
   return tagCombos
     .filter(c=>(c.scope==='deck'||!c.scope)&&deckTagSet.has(c.triggerTag)&&deckTagSet.has(c.conditionTag))
     .map(c=>({...c,baseScore:base[c.targetTag]??0}));
-}
-
-// ── Active calc adjusters for display ────────────────────────────────────────
-export function getActiveAdjusterDetails(chars, actions, calcAdjusters=[]){
-  // Deck-scoped adjusters are always "active" when there are cards in the deck
-  const hasCards=chars.length>0||actions.length>0;
-  if(!hasCards) return[];
-  return(calcAdjusters||[]).filter(a=>a.scope==='deck');
 }
 
 // ── Meta analytics ────────────────────────────────────────────────────────────
@@ -86,37 +99,22 @@ export function getMetaAnalytics(metaDecks){
   return{charCount,actionCount};
 }
 
-// ── Auto deck generation (no talents) ────────────────────────────────────────
-export function autoGenerateDeck(cards, cardTags, tags, tagCombos, calcAdjusters=[]){
-  const cardList=Object.values(cards);
-  const score=id=>calcCardScore(id,cardTags,tags,tagCombos,calcAdjusters);
-
-  const chars=cardList.filter(c=>c.type==='character')
-    .sort((a,b)=>score(b.id)-score(a.id)).slice(0,3).map(c=>c.id);
-
-  const actions=[];
-  const cnt={};
-  const add=id=>{
-    if(actions.length>=30||(cnt[id]||0)>=2) return false;
-    actions.push(id); cnt[id]=(cnt[id]||0)+1; return true;
-  };
-
-  const candidates=cardList
-    .filter(c=>c.type!=='character'&&c.type!=='talent')
-    .sort((a,b)=>score(b.id)-score(a.id));
-
-  for(const card of candidates){
-    if(actions.length>=30) break;
-    add(card.id); add(card.id);
-  }
+// ── Auto deck (no talent) ─────────────────────────────────────────────────────
+export function autoGenerateDeck(cards,cardTags,tags,tagCombos,calcAdjusters=[]){
+  const list=Object.values(cards);
+  const sc=id=>calcCardScore(id,cardTags,tags,tagCombos,calcAdjusters);
+  const chars=list.filter(c=>c.type==='character')
+    .sort((a,b)=>sc(b.id)-sc(a.id)).slice(0,3).map(c=>c.id);
+  const actions=[];const cnt={};
+  const add=id=>{ if(actions.length>=30||(cnt[id]||0)>=2) return; actions.push(id); cnt[id]=(cnt[id]||0)+1; };
+  list.filter(c=>c.type!=='character'&&c.type!=='talent')
+    .sort((a,b)=>sc(b.id)-sc(a.id))
+    .forEach(c=>{ add(c.id); add(c.id); });
   return{chars,actions};
 }
 
-// ── Helpers for deck constraints ──────────────────────────────────────────────
+// ── Deck constraints ──────────────────────────────────────────────────────────
 export function isLegendCard(card){
-  if(!card?.cost||!Array.isArray(card.cost)) return false;
-  return card.cost.some(c=>c.cost_type==='GCG_COST_LEGEND');
+  return Array.isArray(card?.cost)&&card.cost.some(c=>c.cost_type==='GCG_COST_LEGEND');
 }
-export function isGensoHenkan(card){
-  return card?.name?.includes('元素変幻')??false;
-}
+export function isGensoHenkan(card){ return card?.name?.includes('元素変幻')??false; }
