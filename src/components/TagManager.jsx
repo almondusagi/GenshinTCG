@@ -9,7 +9,7 @@ const OPS=[{v:'×',l:'× 掛け算'},{v:'÷',l:'÷ 割り算'}];
 const toDisplay=v=>(v===0||v===null||v===undefined)?'':String(v);
 const fromInput=s=>s===''?0:Number(s);
 
-export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos,calcAdjusters,setCalcAdjusters}){
+export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos,calcAdjusters,setCalcAdjusters,setCardTags}){
   const [newTagName,setNTN]=useState('');
   const [newTagScore,setNTS]=useState('');
   const [newTagGroup,setNTG]=useState('');
@@ -91,6 +91,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
       if(d.tags){setTags(d.tags);const m={};for(const t of d.tags)m[t.id]=toDisplay(t.score);setScoreInputs(m);}
       if(d.tagCombos)setTagCombos(d.tagCombos);
       if(d.calcAdjusters)setCalcAdjusters(d.calcAdjusters);
+      if(d.cardTags&&setCardTags)setCardTags(d.cardTags);
       setBackupText('');setBackupMsg('✓ 復元しました');setTimeout(()=>setBackupMsg(''),3000);
     }catch(e){setBackupMsg('❌ '+e.message);}
   };

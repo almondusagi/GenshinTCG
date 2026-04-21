@@ -84,7 +84,8 @@ export default function App(){
         {activeTab==='tags'&&(
           <TagManager tags={tags} setTags={setTags} groups={groups} setGroups={setGroups}
             tagCombos={tagCombos} setTagCombos={setCombos}
-            calcAdjusters={calcAdjusters} setCalcAdjusters={setCalcAdjusters}/>
+            calcAdjusters={calcAdjusters} setCalcAdjusters={setCalcAdjusters}
+            setCardTags={setCardTags}/>
         )}
         {activeTab==='analytics'&&(
           <Analytics metaDecks={metaDecks} cards={cards} analyticsData={getMetaAnalytics(metaDecks)}/>
