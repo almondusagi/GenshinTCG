@@ -25,25 +25,53 @@ function fmtCost(cost){
 }
 
 // ── Long press hook ───────────────────────────────────────────────────────────
+// fired : long-press triggered  → block onShort
+// moved : finger dragged > threshold → block onShort (was a scroll)
+const MOVE_THRESHOLD=8; // px
+
 function useLongPress(onLong,onShort,delay=150){
-  const timer=useRef(null);
-  const fired=useRef(false);
+  const timer =useRef(null);
+  const fired =useRef(false);
+  const moved =useRef(false);
+  const origin=useRef({x:0,y:0});
+
   const start=useCallback((e)=>{
     fired.current=false;
-    const ev=e.touches?.[0]??e;
-    timer.current=setTimeout(()=>{ fired.current=true; onLong(ev); },delay);
+    moved.current=false;
+    const t=e.touches?.[0]??e;
+    origin.current={x:t.clientX,y:t.clientY};
+    timer.current=setTimeout(()=>{ fired.current=true; onLong(t); },delay);
   },[onLong,delay]);
+
+  const handleMove=useCallback((e)=>{
+    if(fired.current) return; // already long-pressed, keep preview open
+    const t=e.touches?.[0]??e;
+    const dx=Math.abs(t.clientX-origin.current.x);
+    const dy=Math.abs(t.clientY-origin.current.y);
+    if(dx>MOVE_THRESHOLD||dy>MOVE_THRESHOLD){
+      clearTimeout(timer.current);
+      moved.current=true;
+    }
+  },[]);
+
   const end=useCallback((e)=>{
     clearTimeout(timer.current);
-    if(!fired.current) onShort(e);
+    if(!fired.current&&!moved.current) onShort(e);
     fired.current=false;
+    moved.current=false;
   },[onShort]);
-  const cancel=useCallback(()=>{ clearTimeout(timer.current); fired.current=false; },[]);
+
+  const cancel=useCallback(()=>{
+    clearTimeout(timer.current);
+    fired.current=false;
+    moved.current=false;
+  },[]);
+
   return{
     onMouseDown:start,onMouseUp:end,onMouseLeave:cancel,
     onTouchStart:(e)=>{e.preventDefault();start(e);},
     onTouchEnd:(e)=>{e.preventDefault();end(e);},
-    onTouchMove:cancel,
+    onTouchMove:handleMove,
   };
 }
 
