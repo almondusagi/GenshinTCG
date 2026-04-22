@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useMemo} from 'react';
+import React,{useState,useEffect,useMemo,useCallback} from 'react';
 import DeckBuilder from './components/DeckBuilder';
 import Analytics from './components/Analytics';
 import TournamentUploader from './components/TournamentUploader';
@@ -53,6 +53,16 @@ export default function App(){
   const handleUpdateMeta=d=>{const c=[...metaDecks,...d];setMeta(c);saveMeta(c);};
   const handleClearMeta=()=>{setMeta([]);clearMetaStorage();};
 
+  // バックアップ復元 — 全ステートを一括更新
+  const handleRestore=useCallback((d)=>{
+    if(d.groups)       setGroups(d.groups);
+    if(d.tags)         setTags(d.tags);
+    if(d.tagCombos)    setCombos(d.tagCombos);
+    if(d.calcAdjusters)setCalcAdjusters(d.calcAdjusters);
+    if(d.cardTags)     setCardTags(d.cardTags);
+    if(d.presets)      {} // presets are localStorage-only; already saved by importBackup
+  },[]);
+
   return(
     <div className="app-container">
       <nav className="glass-panel navbar desktop-nav">
@@ -84,14 +94,14 @@ export default function App(){
         {activeTab==='tags'&&(
           <TagManager tags={tags} setTags={setTags} groups={groups} setGroups={setGroups}
             tagCombos={tagCombos} setTagCombos={setCombos}
-            calcAdjusters={calcAdjusters} setCalcAdjusters={setCalcAdjusters}
-            setCardTags={setCardTags}/>
+            calcAdjusters={calcAdjusters} setCalcAdjusters={setCalcAdjusters}/>
         )}
         {activeTab==='analytics'&&(
           <Analytics metaDecks={metaDecks} cards={cards} analyticsData={getMetaAnalytics(metaDecks)}/>
         )}
         {activeTab==='data'&&(
-          <TournamentUploader metaDecks={metaDecks} onUpdateMeta={handleUpdateMeta} onClearMeta={handleClearMeta}/>
+          <TournamentUploader metaDecks={metaDecks} onUpdateMeta={handleUpdateMeta}
+            onClearMeta={handleClearMeta} onRestore={handleRestore}/>
         )}
       </main>
       <nav className="mobile-bottom-nav">

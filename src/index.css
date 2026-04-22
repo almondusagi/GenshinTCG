@@ -305,7 +305,20 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .fsbar-panel{background:rgba(8,11,22,.97);border:1px solid var(--panel-border);border-radius:var(--radius-sm);
   padding:10px;display:flex;flex-direction:column;gap:7px;z-index:200;position:relative;}
 .fsbar-panel-title{font-size:.75rem;color:var(--muted);}
+/* Section headers inside filter panel */
+.fsbar-section-head{
+  display:flex;align-items:center;gap:5px;
+  font-size:.75rem;font-weight:600;color:var(--muted);
+  padding:4px 2px 2px;
+  border-top:1px solid rgba(255,255,255,.06);
+  margin-top:2px;
+}
+.fsbar-section-head:first-child{border-top:none;margin-top:0;padding-top:0;}
+.fsbar-section-hint{font-size:.68rem;font-weight:400;color:#334155;margin-left:2px;}
+.fsbar-empty{font-size:.75rem;color:var(--muted);padding:4px 2px;}
 .fsbar-tag-list{display:flex;flex-wrap:wrap;gap:4px;}
+/* Type filter chip (element/秘伝) in active chips row */
+.fschip.type-chip{font-weight:700;}
 
 /* ── CardReviewTable ──────────────────────────────────────────────────────── */
 .review-layout{display:flex;flex-direction:column;gap:9px;width:100%;overflow:hidden;}
@@ -343,6 +356,32 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 .tag-row-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
 .tag-score-area{display:flex;align-items:center;gap:5px;}
 .score-preview{font-family:'Rajdhani',sans-serif;font-size:.95rem;font-weight:700;min-width:28px;text-align:right;}
+/* Coefficient mode */
+.coeff-mode-btn{transition:.18s;}
+.coeff-mode-btn.on{color:#60a5fa !important;background:rgba(96,165,250,.15) !important;}
+.coeff-panel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;
+  background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.15);border-radius:7px;width:100%;}
+.coeff-row{display:flex;flex-direction:column;gap:2px;flex:1;min-width:80px;}
+.coeff-label{font-size:.68rem;color:#94a3b8;display:flex;align-items:center;gap:3px;white-space:nowrap;}
+.coeff-input{width:100% !important;min-width:50px;}
+.coeff-op{font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;color:#64748b;flex-shrink:0;}
+.coeff-eq{font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;color:#fbbf24;flex-shrink:0;}
+.coeff-result{font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;min-width:36px;text-align:center;}
+.coeff-legend{display:flex;align-items:center;gap:8px;padding:6px 9px;background:rgba(96,165,250,.06);
+  border:1px solid rgba(96,165,250,.15);border-radius:7px;flex-wrap:wrap;}
+.coeff-legend-item{display:flex;align-items:center;gap:4px;font-size:.75rem;color:#60a5fa;font-weight:600;white-space:nowrap;}
+.coeff-legend-desc{font-size:.7rem;color:#64748b;flex:1;min-width:0;}
+/* Help popup */
+.coeff-help-wrap{position:relative;display:inline-flex;align-items:center;}
+.coeff-help-btn{background:none;border:none;color:#64748b;cursor:pointer;padding:1px;display:inline-flex;
+  align-items:center;transition:.15s;}
+.coeff-help-btn:hover{color:#94a3b8;}
+.coeff-help-popup{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  width:260px;background:rgba(8,11,22,.98);border:1px solid rgba(251,191,36,.3);border-radius:8px;
+  padding:10px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:tfade .12s ease;}
+.coeff-help-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.coeff-help-header strong{font-size:.82rem;color:var(--gold);}
+.coeff-help-popup p{font-size:.73rem;color:#94a3b8;line-height:1.6;white-space:pre-line;margin:0;}
 .combo-hint{font-size:.8rem;color:var(--muted);line-height:1.5;}
 .combo-form{display:flex;flex-direction:column;padding:11px !important;}
 .combo-form-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 9px;align-items:center;}
@@ -375,6 +414,16 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
 
 /* ── Data view ────────────────────────────────────────────────────────────── */
 .data-view{display:grid;grid-template-columns:1fr 1.5fr;gap:12px;width:100%;overflow-y:auto;align-content:start;}
+/* 4-panel layout for data management (meta import + backup export/restore) */
+.data-view-4col{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:auto auto;
+  gap:12px;
+  width:100%;
+  overflow-y:auto;
+  align-content:start;
+}
 .meta-deck-list{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;}
 .meta-deck-item{display:flex;justify-content:space-between;padding:6px 9px;background:rgba(255,255,255,.03);border-radius:6px;font-size:.8rem;}
 .json-textarea{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--panel-border);color:var(--text);padding:9px;border-radius:7px;font-family:'Courier New',monospace;font-size:.76rem;resize:vertical;line-height:1.5;}
@@ -391,6 +440,7 @@ body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);
   .tagmgr-layout{grid-template-columns:1fr;}
   .analytics-view{grid-template-columns:1fr;}
   .data-view{grid-template-columns:1fr;}
+  .data-view-4col{grid-template-columns:1fr;}
 }
 
 @media (max-width:768px){

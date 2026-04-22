@@ -1,7 +1,7 @@
 import React,{useState,useMemo,useCallback,useEffect,useRef} from 'react';
 import {ChevronLeft,ChevronRight,X,ChevronDown,ChevronRight as CR,Eye} from 'lucide-react';
 import {saveCardTags} from '../utils/storage';
-import {calcCardScore,adjTagKey,isAdjTag,adjIdFromTag} from '../utils/tagScoring';
+import {calcCardScore,adjTagKey,isAdjTag,adjIdFromTag,isLegendCard,isGensoHenkan} from '../utils/tagScoring';
 import FilterSortBar,{applyFilterSort} from './FilterSortBar';
 
 const TL={character:'キャラ',weapon:'武器',artifact:'聖遺物',talent:'天賦',support:'サポート',event:'イベント'};
@@ -9,6 +9,18 @@ const TC={character:'#f87171',weapon:'#60a5fa',artifact:'#c084fc',talent:'#fbbf2
 const EC={氷:'#93c5fd',水:'#60a5fa',炎:'#f87171',雷:'#c084fc',風:'#34d399',岩:'#fbbf24',草:'#4ade80',無色:'#94a3b8'};
 const TF=['all','character','weapon','artifact','talent','support','event'];
 const PAGE_SIZE=40;
+const COST_JP={GCG_COST_DICE_CRYO:'氷',GCG_COST_DICE_HYDRO:'水',GCG_COST_DICE_PYRO:'炎',
+  GCG_COST_DICE_ELECTRO:'雷',GCG_COST_DICE_ANEMO:'風',GCG_COST_DICE_GEO:'岩',
+  GCG_COST_DICE_DENDRO:'草',GCG_COST_DICE_SAME:'同一',GCG_COST_DICE_VOID:'無色',GCG_COST_LEGEND:'秘伝'};
+function fmtCost(cost){
+  if(!cost) return 'なし';
+  if(typeof cost==='number') return `${cost}`;
+  if(Array.isArray(cost)){
+    const p=cost.filter(c=>c.cost_type!=='GCG_COST_INVALID'&&c.count).map(c=>`${COST_JP[c.cost_type]||c.cost_type}×${c.count}`);
+    return p.join('+')||'なし';
+  }
+  return 'なし';
+}
 
 // ── Long press hook (same as DeckBuilder) ─────────────────────────────────────
 const MOVE_THRESHOLD=8;
@@ -262,15 +274,74 @@ function ImgPreview({card,onClose}){
   const ec=EC[card.element]||'#94a3b8';
   return(
     <div className="img-preview-overlay" onClick={onClose}>
-      <div className="img-preview-box" onClick={e=>e.stopPropagation()} style={{borderColor:ec}}>
+      <div className="img-preview-box" onClick={e=>e.stopPropagation()} style={{borderColor:ec,maxWidth:480}}>
         <img src={card.url} alt={card.name} onError={e=>e.target.style.display='none'}/>
         <div className="img-preview-info">
           <span style={{fontWeight:700}}>{card.name}</span>
           <span style={{color:TC[card.type],fontSize:'.8rem'}}>{TL[card.type]}</span>
           <span style={{color:ec,fontSize:'.8rem'}}>{card.element}</span>
+          {card.skills&&card.skills.length>0&&(
+            <div className="preview-skills">
+              {card.skills.map(sk=>(
+                <div key={sk.id} className="preview-skill-block">
+                  <div className="preview-skill-header">
+                    <span className="preview-skill-type">{sk.typeName||sk.type}</span>
+                    <span className="preview-skill-name">{sk.name}</span>
+                  </div>
+                  <p className="preview-skill-desc">{sk.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <button className="btn-icon" style={{position:'absolute',top:6,right:6}} onClick={onClose}><X size={16}/></button>
       </div>
+    </div>
+  );
+}
+
+// ── Desktop tooltip for review ──────────────────────────────────────────────────────
+function ReviewTooltip({card,mousePos,cardTags,tags,tagCombos,calcAdjusters}){
+  if(!card) return null;
+  const myTags=(cardTags[card.id]||[]).filter(t=>!isAdjTag(t));
+  const s=calcCardScore(card.id,cardTags,tags,tagCombos,calcAdjusters);
+  const ec=EC[card.element]||'#94a3b8';
+  let left=mousePos.x+16,top=mousePos.y-50;
+  if(left+260>window.innerWidth-8) left=mousePos.x-268;
+  if(top+280>window.innerHeight-8) top=window.innerHeight-288;
+  if(top<8) top=8;
+  return(
+    <div className="card-tooltip" style={{left,top}}>
+      <div className="tooltip-header" style={{borderBottomColor:ec+'55'}}>
+        <img src={card.url} alt="" className="tooltip-img" onError={e=>e.target.style.display='none'}/>
+        <div className="tooltip-title">
+          <span className="tooltip-name">{card.name}</span>
+          <div className="tooltip-badges">
+            <span className="tooltip-badge" style={{color:TC[card.type],borderColor:TC[card.type]+'55'}}>{TL[card.type]}</span>
+            <span className="tooltip-badge" style={{color:ec,borderColor:ec+'55'}}>{card.element}</span>
+            {isLegendCard(card)&&<span className="tooltip-badge" style={{color:'#fbbf24',borderColor:'#fbbf2455'}}>秘伝</span>}
+            {isGensoHenkan(card)&&<span className="tooltip-badge" style={{color:'#c084fc',borderColor:'#c084fc55'}}>元素変幻</span>}
+          </div>
+        </div>
+      </div>
+      <div className="tooltip-stats">
+        {card.type==='character'&&<div className="tooltip-stat-row"><span className="tooltip-stat-label">HP</span><span style={{color:'#f87171'}}>♥ {card.hp}</span></div>}
+        <div className="tooltip-stat-row"><span className="tooltip-stat-label">コスト</span><span>{fmtCost(card.cost)}</span></div>
+        {myTags.length>0&&<div className="tooltip-stat-row"><span className="tooltip-stat-label">タグ</span><span style={{fontSize:'.73rem'}}>{[...new Set(myTags)].map(t=>{const c=myTags.filter(x=>x===t).length;return c>1?`${t}×${c}`:t;}).join(' ')}</span></div>}
+        {s!==0&&<div className="tooltip-stat-row"><span className="tooltip-stat-label">スコア</span><span style={{color:s>0?'#34d399':'#f87171',fontWeight:700}}>{s>0?`+${s}`:s}</span></div>}
+      </div>
+      {card.skills&&card.skills.length>0&&(
+        <div className="tooltip-skills">
+          {card.skills.map(sk=>(
+            <div key={sk.id} className="tooltip-skill-row">
+              <span className="tooltip-skill-type">{sk.typeName||sk.type}</span>
+              <span className="tooltip-skill-name">{sk.name}</span>
+              <p className="tooltip-skill-desc">{sk.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="tooltip-hint"><span>クリック: タグピッカー</span><span>長押し: プレビュー</span></div>
     </div>
   );
 }
@@ -288,10 +359,14 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
   const [page,setPage]=useState(0);
   const [picker,setPicker]=useState(null);
   const [preview,setPreview]=useState(null);
+  const [hovered,setHovered]=useState(null);
+  const [mousePos,setMP]=useState({x:0,y:0});
   const [filterTags,setFilterTags]=useState([]);
+  const [typeFilters,setTypeFilters]=useState([]);
   const [sortKeys,setSortKeys]=useState([]);
   const [sortDir,setSortDir]=useState('desc');
   const isMobile=useIsMobile();
+  const handleMM=useCallback(e=>setMP({x:e.clientX,y:e.clientY}),[]);
 
   const base=useMemo(()=>{
     let l=Object.values(cards);
@@ -300,8 +375,8 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
     return l;
   },[cards,typeFilter,search]);
 
-  const filtered=useMemo(()=>applyFilterSort(base,cardTags,filterTags,sortKeys,sortDir),
-    [base,cardTags,filterTags,sortKeys,sortDir]);
+  const filtered=useMemo(()=>applyFilterSort(base,cardTags,typeFilters,filterTags,sortKeys,sortDir),
+    [base,cardTags,typeFilters,filterTags,sortKeys,sortDir]);
 
   const totalPages=Math.ceil(filtered.length/PAGE_SIZE);
   const pageCards=filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -359,7 +434,9 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
             </button>
           ))}
         </div>
-        <FilterSortBar tags={tags} filterTags={filterTags} onFilterChange={v=>{setFilterTags(v);setPage(0);}}
+        <FilterSortBar tags={tags}
+          typeFilters={typeFilters} onTypeFilterChange={v=>{setTypeFilters(v);setPage(0);}}
+          filterTags={filterTags}  onFilterChange={v=>{setFilterTags(v);setPage(0);}}
           sortKeys={sortKeys} onSortChange={setSortKeys} sortDir={sortDir} onSortDirChange={setSortDir}/>
         <div className="review-stats-row">
           <span className="pool-count">{filtered.length}枚</span>
@@ -416,7 +493,10 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
               return(
                 <div key={card.id}
                   className={`review-card-cell ${myTags.length>0||adjTags.length>0?'tagged':''} ${isOpen?'editing':''}`}
-                  onClick={e=>openPicker(card.id,e)}>
+                  onClick={e=>openPicker(card.id,e)}
+                  onMouseEnter={()=>setHovered(card)}
+                  onMouseLeave={()=>setHovered(null)}
+                  onMouseMove={handleMM}>
                   <div className="rc-elem-strip" style={{background:ec}}/>
                   <img src={card.url} alt={card.name} className="rc-img"
                     onError={e=>e.target.style.display='none'} loading="lazy"/>
@@ -461,6 +541,7 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
           onClose={closePicker} onToggle={handleToggle}/>
       )}
       <ImgPreview card={preview} onClose={()=>setPreview(null)}/>
+      {!isMobile&&!picker&&<ReviewTooltip card={hovered} mousePos={mousePos} cardTags={cardTags} tags={tags} tagCombos={tagCombos} calcAdjusters={calcAdjusters}/>}
     </div>
   );
 }

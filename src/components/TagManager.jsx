@@ -1,6 +1,6 @@
 import React,{useState,useEffect} from 'react';
-import {Plus,Trash2,Zap,Save,ArrowUp,ArrowDown,Download,Upload,Tag,Layers,Calculator} from 'lucide-react';
-import {saveTags,saveTagCombos,saveGroups,saveCalcAdjusters,exportBackup,importBackup} from '../utils/storage';
+import {Plus,Trash2,Zap,Save,ArrowUp,ArrowDown,Tag,Layers,Calculator,HelpCircle,X} from 'lucide-react';
+import {saveTags,saveTagCombos,saveGroups,saveCalcAdjusters} from '../utils/storage';
 
 const genId=()=>Math.random().toString(36).slice(2,9);
 const SCOPES=[{v:'deck',l:'デッキ全体'},{v:'card',l:'カード単体'}];
@@ -9,7 +9,58 @@ const OPS=[{v:'×',l:'× 掛け算'},{v:'÷',l:'÷ 割り算'}];
 const toDisplay=v=>(v===0||v===null||v===undefined)?'':String(v);
 const fromInput=s=>s===''?0:Number(s);
 
-export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos,calcAdjusters,setCalcAdjusters,setCardTags}){
+// ── Help tooltip ──────────────────────────────────────────────────────────────
+const COEFF_HELP={
+  baseValue:{
+    title:'基本価値',
+    desc:'その効果が1回完全に発揮された場合の価値を点数化したもの。\n例: サイコロ1個 = 1点、HP回復1 = 0.8点、ダメージ+1 = 1点 等、\nチーム全体のリソース変換で考えます。',
+  },
+  triggerEase:{
+    title:'発動容易度',
+    desc:'効果が条件なく確実に発動する場合は 1.0。\n「通常攻撃を発動した時」のような条件付き = 0.4~0.8\n「相手がXした時」のような相手依存 = 0.1~0.5\n「ラウンド開始時」自動発動 = 1.0\n発動しにくいほど低くします。',
+  },
+  expectedCount:{
+    title:'期待発動回数',
+    desc:'想定ラウンド数内で、平均何回この効果が発動するか。\n無制限の永続効果（毎ラウンド） = 想定ラウンド数\n「使用回数：3」 = min(3, 想定ラウンド数)\n1回限り = 1\n「各ラウンド1回まで」で3ラウンド想定 = 1.5~2.5 等。',
+  },
+};
+
+function CoeffHelp({type}){
+  const [open,setOpen]=useState(false);
+  const h=COEFF_HELP[type];
+  if(!h) return null;
+  return(
+    <span className="coeff-help-wrap">
+      <button className="coeff-help-btn" onClick={e=>{e.stopPropagation();setOpen(!open);}} title={h.title}>
+        <HelpCircle size={13}/>
+      </button>
+      {open&&(
+        <div className="coeff-help-popup">
+          <div className="coeff-help-header">
+            <strong>{h.title}</strong>
+            <button className="btn-icon" onClick={()=>setOpen(false)}><X size={12}/></button>
+          </div>
+          <p>{h.desc}</p>
+        </div>
+      )}
+    </span>
+  );
+}
+
+// ── Coefficient mode or direct score ──────────────────────────────────────────
+function calcTagScore(tag){
+  if(tag.useCoefficients){
+    const base=Number(tag.baseValue)||0;
+    const easeRaw=Number(tag.triggerEase);
+    const ease=isNaN(easeRaw)?1:easeRaw;
+    const countRaw=Number(tag.expectedCount);
+    const count=isNaN(countRaw)?1:countRaw;
+    return Math.round(base*ease*count*100)/100;
+  }
+  return Number(tag.score)||0;
+}
+
+export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setTagCombos,calcAdjusters,setCalcAdjusters}){
   const [newTagName,setNTN]=useState('');
   const [newTagScore,setNTS]=useState('');
   const [newTagGroup,setNTG]=useState('');
@@ -17,8 +68,6 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const [combo,setCombo]=useState({triggerTag:'',conditionTag:'',targetTag:'',overrideScore:'',scope:'deck'});
   const [adj,setAdj]=useState({opType:'×',value:'',scope:'deck'});
   const [saved,setSaved]=useState(false);
-  const [backupText,setBackupText]=useState('');
-  const [backupMsg,setBackupMsg]=useState('');
 
   const [scoreInputs,setScoreInputs]=useState(()=>{const m={};for(const t of tags) m[t.id]=toDisplay(t.score);return m;});
   useEffect(()=>{
@@ -47,12 +96,29 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const addTag=()=>{
     const n=newTagName.trim();if(!n||tags.some(t=>t.name===n))return;
     const nid=genId(),ns=fromInput(newTagScore);
-    const u=[...tags,{id:nid,name:n,score:ns,groupId:newTagGroup||null}];
+    const u=[...tags,{id:nid,name:n,score:ns,groupId:newTagGroup||null,useCoefficients:false,baseValue:0,triggerEase:1,expectedCount:1}];
     setTags(u);saveTags(u);setScoreInputs(p=>({...p,[nid]:toDisplay(ns)}));
     setNTN('');setNTS('');setNTG('');
   };
   const updateTagScore=(id,v)=>setTags(tags.map(t=>t.id===id?{...t,score:Number(v)}:t));
   const updateTagGroup=(id,gid)=>{const u=tags.map(t=>t.id===id?{...t,groupId:gid||null}:t);setTags(u);saveTags(u);};
+  const updateTagField=(id,field,val)=>{
+    const u=tags.map(t=>{
+      if(t.id!==id) return t;
+      const updated={...t,[field]:val};
+      // Auto-calculate score when coefficients change
+      if(updated.useCoefficients && ['baseValue','triggerEase','expectedCount','useCoefficients'].includes(field)){
+        updated.score=calcTagScore(updated);
+      }
+      return updated;
+    });
+    setTags(u);
+    // Update score input display as well  
+    const tag=u.find(t=>t.id===id);
+    if(tag?.useCoefficients){
+      setScoreInputs(p=>({...p,[id]:toDisplay(tag.score)}));
+    }
+  };
   const delTag=id=>{const u=tags.filter(t=>t.id!==id);setTags(u);saveTags(u);};
   const moveTag=(idx,dir)=>{
     const a=[...tags],ni=idx+dir;if(ni<0||ni>=a.length)return;
@@ -82,49 +148,79 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
     [a[idx],a[ni]]=[a[ni],a[idx]];setCalcAdjusters(a);saveCalcAdjusters(a);
   };
 
-  // Backup
-  const handleExport=()=>{exportBackup();setBackupMsg('✓ ダウンロードしました');setTimeout(()=>setBackupMsg(''),3000);};
-  const handleImport=()=>{
-    try{
-      const d=importBackup(backupText);
-      if(d.groups)setGroups(d.groups);
-      if(d.tags){setTags(d.tags);const m={};for(const t of d.tags)m[t.id]=toDisplay(t.score);setScoreInputs(m);}
-      if(d.tagCombos)setTagCombos(d.tagCombos);
-      if(d.calcAdjusters)setCalcAdjusters(d.calcAdjusters);
-      if(d.cardTags&&setCardTags)setCardTags(d.cardTags);
-      setBackupText('');setBackupMsg('✓ 復元しました');setTimeout(()=>setBackupMsg(''),3000);
-    }catch(e){setBackupMsg('❌ '+e.message);}
-  };
-
   const ungrouped=tags.filter(t=>!t.groupId);
   const getGroupTags=gid=>tags.filter(t=>t.groupId===gid);
 
-  const TagRow=({tag,idx})=>(
-    <div className="tag-row">
-      <div className="tag-row-left">
-        <span className="tag-pill">{tag.name}</span>
-        <select className="combo-select" style={{fontSize:'.72rem',padding:'3px 6px',maxWidth:90}}
-          value={tag.groupId||''} onChange={e=>updateTagGroup(tag.id,e.target.value)}>
-          <option value="">グループなし</option>
-          {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-      </div>
-      <div className="tag-score-area">
-        <input type="number" className="score-input" placeholder="0"
-          value={getSD(tag.id)} onChange={e=>handleSI(tag.id,e.target.value)}/>
-        {(Number(getSD(tag.id))||0)!==0&&(
-          <span className="score-preview" style={{color:(Number(getSD(tag.id))||0)>0?'#34d399':'#f87171'}}>
-            {(Number(getSD(tag.id))||0)>0?`+${Number(getSD(tag.id))||0}`:Number(getSD(tag.id))||0}
-          </span>
+  const TagRow=({tag,idx})=>{
+    const isCoeff=tag.useCoefficients;
+    const computedScore=isCoeff?calcTagScore(tag):(Number(getSD(tag.id))||0);
+    return(
+      <div className="tag-row" style={{flexDirection:'column',gap:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:7,width:'100%'}}>
+          <div className="tag-row-left">
+            <span className="tag-pill">{tag.name}</span>
+            <select className="combo-select" style={{fontSize:'.72rem',padding:'3px 6px',maxWidth:90}}
+              value={tag.groupId||''} onChange={e=>updateTagGroup(tag.id,e.target.value)}>
+              <option value="">グループなし</option>
+              {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+          <div className="tag-score-area">
+            {!isCoeff&&(
+              <input type="number" className="score-input" placeholder="0"
+                value={getSD(tag.id)} onChange={e=>handleSI(tag.id,e.target.value)}/>
+            )}
+            {computedScore!==0&&(
+              <span className="score-preview" style={{color:computedScore>0?'#34d399':'#f87171'}}>
+                {computedScore>0?`+${computedScore}`:computedScore}
+              </span>
+            )}
+          </div>
+          <div style={{display:'flex',gap:2,alignItems:'center'}}>
+            <button className={`btn-icon coeff-mode-btn ${isCoeff?'on':''}`}
+              onClick={()=>updateTagField(tag.id,'useCoefficients',!isCoeff)}
+              title={isCoeff?'直接入力モードに切替':'係数モードに切替'}>
+              <Calculator size={12}/>
+            </button>
+            <button className="btn-icon" onClick={()=>moveTag(idx,-1)}><ArrowUp size={12}/></button>
+            <button className="btn-icon" onClick={()=>moveTag(idx,1)}><ArrowDown size={12}/></button>
+            <button className="btn-icon danger" onClick={()=>delTag(tag.id)}><Trash2 size={13}/></button>
+          </div>
+        </div>
+        {isCoeff&&(
+          <div className="coeff-panel">
+            <div className="coeff-row">
+              <label className="coeff-label">
+                基本価値 <CoeffHelp type="baseValue"/>
+              </label>
+              <input type="number" className="score-input coeff-input" placeholder="0" step="0.5"
+                value={toDisplay(tag.baseValue)} onChange={e=>updateTagField(tag.id,'baseValue',fromInput(e.target.value))}/>
+            </div>
+            <span className="coeff-op">×</span>
+            <div className="coeff-row">
+              <label className="coeff-label">
+                発動容易度 <CoeffHelp type="triggerEase"/>
+              </label>
+              <input type="number" className="score-input coeff-input" placeholder="1.0" step="0.1" min="0" max="1"
+                value={toDisplay(tag.triggerEase)} onChange={e=>updateTagField(tag.id,'triggerEase',fromInput(e.target.value))}/>
+            </div>
+            <span className="coeff-op">×</span>
+            <div className="coeff-row">
+              <label className="coeff-label">
+                期待発動回数 <CoeffHelp type="expectedCount"/>
+              </label>
+              <input type="number" className="score-input coeff-input" placeholder="1" step="0.5" min="0"
+                value={toDisplay(tag.expectedCount)} onChange={e=>updateTagField(tag.id,'expectedCount',fromInput(e.target.value))}/>
+            </div>
+            <span className="coeff-eq">=</span>
+            <span className="coeff-result" style={{color:computedScore>0?'#34d399':computedScore<0?'#f87171':'var(--muted)'}}>
+              {computedScore>0?`+${computedScore}`:computedScore}
+            </span>
+          </div>
         )}
       </div>
-      <div style={{display:'flex',gap:2}}>
-        <button className="btn-icon" onClick={()=>moveTag(idx,-1)}><ArrowUp size={12}/></button>
-        <button className="btn-icon" onClick={()=>moveTag(idx,1)}><ArrowDown size={12}/></button>
-        <button className="btn-icon danger" onClick={()=>delTag(tag.id)}><Trash2 size={13}/></button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return(
     <div className="tagmgr-layout">
@@ -135,6 +231,10 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
           <button className={`deck-btn save-confirm-btn ${saved?'saved':''}`} onClick={saveScores}>
             <Save size={13}/>{saved?'✓ 保存済み':'スコア保存'}
           </button>
+        </div>
+        <div className="coeff-legend">
+          <span className="coeff-legend-item"><Calculator size={11}/> 係数モード</span>
+          <span className="coeff-legend-desc">タグ横の <Calculator size={10}/> ボタンで「基本価値 × 発動容易度 × 期待発動回数」の係数入力に切り替え</span>
         </div>
         <div className="tag-add-row">
           <input className="search-input" placeholder="タグ名" value={newTagName}
@@ -279,22 +379,6 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         </div>
       </section>
 
-      {/* Backup */}
-      <section className="glass-panel tagmgr-section" style={{gridColumn:'1/-1'}}>
-        <h2 className="stat-title"><Download size={15} style={{display:'inline',marginRight:6}}/>バックアップ / 復元</h2>
-        <p className="combo-hint">デッキプリセット・カード評価・タグ管理のデータをまとめてエクスポート/インポートできます。<br/>出力したJSONはデータ管理のインポートにもそのまま使用できます。</p>
-        <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
-          <button className="deck-btn auto-btn" onClick={handleExport}><Download size={13}/> JSONでエクスポート</button>
-          <div style={{display:'flex',flexDirection:'column',gap:8,flex:1,minWidth:240}}>
-            <textarea className="json-textarea" rows={4} placeholder="バックアップJSONを貼り付けて復元..."
-              value={backupText} onChange={e=>setBackupText(e.target.value)}/>
-            <button className="import-btn" onClick={handleImport} disabled={!backupText.trim()}>
-              <Upload size={13}/> 復元する
-            </button>
-          </div>
-        </div>
-        {backupMsg&&<p className={backupMsg.startsWith('✓')?'import-success':'import-error'}>{backupMsg}</p>}
-      </section>
     </div>
   );
 }

@@ -81,7 +81,7 @@ function ImgPreview({card,onClose}){
   const ec=EC[card.element]||'#94a3b8';
   return(
     <div className="img-preview-overlay" onClick={onClose}>
-      <div className="img-preview-box" onClick={e=>e.stopPropagation()} style={{borderColor:ec}}>
+      <div className="img-preview-box" onClick={e=>e.stopPropagation()} style={{borderColor:ec,maxWidth:480}}>
         <img src={card.url} alt={card.name} onError={e=>e.target.style.display='none'}/>
         <div className="img-preview-info">
           <span style={{fontWeight:700,fontSize:'1rem'}}>{card.name}</span>
@@ -89,6 +89,19 @@ function ImgPreview({card,onClose}){
           <span style={{color:ec,fontSize:'.8rem'}}>{card.element}</span>
           {card.type==='character'&&<span style={{color:'#fca5a5',fontSize:'.8rem'}}>HP {card.hp}</span>}
           <span style={{color:'#94a3b8',fontSize:'.78rem'}}>コスト: {fmtCost(card.cost)}</span>
+          {card.skills&&card.skills.length>0&&(
+            <div className="preview-skills">
+              {card.skills.map(sk=>(
+                <div key={sk.id} className="preview-skill-block">
+                  <div className="preview-skill-header">
+                    <span className="preview-skill-type">{sk.typeName||sk.type}</span>
+                    <span className="preview-skill-name">{sk.name}</span>
+                  </div>
+                  <p className="preview-skill-desc">{sk.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <button className="btn-icon" style={{position:'absolute',top:6,right:6}} onClick={onClose}><X size={16}/></button>
       </div>
@@ -116,6 +129,7 @@ function CardTooltip({card,mousePos,cardTags,tags,tagCombos,calcAdjusters}){
             <span className="tooltip-badge" style={{color:TC[card.type],borderColor:TC[card.type]+'55'}}>{TL[card.type]}</span>
             <span className="tooltip-badge" style={{color:ec,borderColor:ec+'55'}}>{card.element}</span>
             {isLegendCard(card)&&<span className="tooltip-badge" style={{color:'#fbbf24',borderColor:'#fbbf2455'}}>秘伝</span>}
+            {isGensoHenkan(card)&&<span className="tooltip-badge" style={{color:'#c084fc',borderColor:'#c084fc55'}}>元素変幻</span>}
           </div>
         </div>
       </div>
@@ -126,6 +140,17 @@ function CardTooltip({card,mousePos,cardTags,tags,tagCombos,calcAdjusters}){
         {s!==0&&<div className="tooltip-stat-row"><span className="tooltip-stat-label">スコア</span><span style={{color:s>0?'#34d399':'#f87171',fontWeight:700}}>{s>0?`+${s}`:s}</span></div>}
       </div>
       {card.desc&&<p className="tooltip-desc">{card.desc.replace(/\\n/g,' ')}</p>}
+      {card.skills&&card.skills.length>0&&(
+        <div className="tooltip-skills">
+          {card.skills.map(sk=>(
+            <div key={sk.id} className="tooltip-skill-row">
+              <span className="tooltip-skill-type">{sk.typeName||sk.type}</span>
+              <span className="tooltip-skill-name">{sk.name}</span>
+              <p className="tooltip-skill-desc">{sk.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="tooltip-hint"><span>左クリック: 追加</span><span>右クリック: 外す</span></div>
     </div>
   );
@@ -145,6 +170,7 @@ function DesktopCard({card,count,onAdd,onRemove,onHover,onLeave,onMouseMove,isMa
       <span className="card-name">{card.name}</span>
       {count>0&&<span className="card-badge">×{count}</span>}
       {isLegendCard(card)&&<span className="card-legend-badge">秘</span>}
+      {isGensoHenkan(card)&&<span className="card-legend-badge" style={{background:'#c084fc'}}>変</span>}
     </div>
   );
 }
@@ -204,7 +230,7 @@ function ActionRow({card,count,onAdd,onRemove,onHover,onLeave,onMouseMove,onPrev
       <div className="action-controls">
         <button className="btn-icon" onClick={e=>{e.stopPropagation();onRemove(card);}}><Minus size={13}/></button>
         <span className="action-count">×{count}</span>
-        <button className="btn-icon" onClick={e=>{e.stopPropagation();onAdd(card);}} disabled={count>=2}><Plus size={13}/></button>
+        <button className="btn-icon" onClick={e=>{e.stopPropagation();onAdd(card);}} disabled={(isLegendCard(card)||isGensoHenkan(card))?count>=1:count>=2}><Plus size={13}/></button>
       </div>
     </div>
   );
@@ -287,6 +313,7 @@ export default function DeckBuilder({
   const [preview,setPreview]=useState(null);
   // Filter/sort state
   const [filterTags,setFilterTags]=useState([]);
+  const [typeFilters,setTypeFilters]=useState([]);
   const [sortKeys,setSortKeys]=useState([]);
   const [sortDir,setSortDir]=useState('desc');
 
@@ -299,8 +326,8 @@ export default function DeckBuilder({
     return true;
   }),[cards,typeFilter,elemFilter,search]);
 
-  const filtered=useMemo(()=>applyFilterSort(base,cardTags,filterTags,sortKeys,sortDir),
-    [base,cardTags,filterTags,sortKeys,sortDir]);
+  const filtered=useMemo(()=>applyFilterSort(base,cardTags,typeFilters,filterTags,sortKeys,sortDir),
+    [base,cardTags,typeFilters,filterTags,sortKeys,sortDir]);
 
   const totalPages=Math.ceil(filtered.length/PAGE_SIZE);
   const pageCards=filtered.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -319,12 +346,16 @@ export default function DeckBuilder({
       if(charCount>=3||selectedChars.includes(card.id)) return;
       setSelectedChars([...selectedChars,card.id]);
     } else {
-      if(actionCount>=30||(acm[card.id]||0)>=2) return;
-      if(isLegendCard(card)&&legendCount>=1&&!acm[card.id]) return showLimit('秘伝カードはデッキに1枚まで');
-      if(isGensoHenkan(card)&&ghCount>=1&&!acm[card.id]) return showLimit('元素変幻カードはデッキに1枚まで');
+      const cnt=acm[card.id]||0;
+      if(actionCount>=30) return;
+      // 秘伝/元素変幻: 各カード1枚まで（同一カード2枚不可）、異なるカードは複数種OK
+      if(isLegendCard(card)&&cnt>=1) return showLimit('秘伝カードは各種1枚まで');
+      if(isGensoHenkan(card)&&cnt>=1) return showLimit('元素変幻カードは各種1枚まで');
+      // 通常カードは2枚まで
+      if(!isLegendCard(card)&&!isGensoHenkan(card)&&cnt>=2) return;
       setSelectedActions([...selectedActions,card.id]);
     }
-  },[charCount,actionCount,selectedChars,selectedActions,acm,legendCount,ghCount,setSelectedChars,setSelectedActions]);
+  },[charCount,actionCount,selectedChars,selectedActions,acm,setSelectedChars,setSelectedActions]);
 
   const removeCard=useCallback((card)=>{
     if(card.type==='character'){
@@ -381,14 +412,16 @@ export default function DeckBuilder({
           </button>
         ))}
       </div>
-      <FilterSortBar tags={tags} filterTags={filterTags} onFilterChange={v=>{setFilterTags(v);setPage(0);}}
+      <FilterSortBar tags={tags}
+        typeFilters={typeFilters} onTypeFilterChange={v=>{setTypeFilters(v);setPage(0);}}
+        filterTags={filterTags}  onFilterChange={v=>{setFilterTags(v);setPage(0);}}
         sortKeys={sortKeys} onSortChange={setSortKeys} sortDir={sortDir} onSortDirChange={setSortDir}/>
       {isMobile?(
         <div className="mob-cards-grid">
           {pageCards.map(card=>{
             const cnt=card.type==='character'?(selectedChars.includes(card.id)?1:0):(acm[card.id]||0);
-            const isLimited=(isLegendCard(card)&&legendCount>=1&&cnt===0)||(isGensoHenkan(card)&&ghCount>=1&&cnt===0);
-            const isMaxed=card.type==='character'?(charCount>=3&&!selectedChars.includes(card.id)):(actionCount>=30||cnt>=2);
+            const isMaxed=card.type==='character'?(charCount>=3&&!selectedChars.includes(card.id)):(actionCount>=30||(isLegendCard(card)||isGensoHenkan(card)?cnt>=1:cnt>=2));
+            const isLimited=false;
             return(<MobileCard key={card.id} card={card} count={cnt} isMaxed={isMaxed} isLimited={isLimited}
               onAdd={addCard} onRemove={removeCard} onPreview={setPreview}/>);
           })}
@@ -397,8 +430,8 @@ export default function DeckBuilder({
         <div className="cards-grid">
           {pageCards.map(card=>{
             const cnt=card.type==='character'?(selectedChars.includes(card.id)?1:0):(acm[card.id]||0);
-            const isLimited=(isLegendCard(card)&&legendCount>=1&&cnt===0)||(isGensoHenkan(card)&&ghCount>=1&&cnt===0);
-            const isMaxed=card.type==='character'?(charCount>=3&&!selectedChars.includes(card.id)):(actionCount>=30||cnt>=2);
+            const isMaxed=card.type==='character'?(charCount>=3&&!selectedChars.includes(card.id)):(actionCount>=30||(isLegendCard(card)||isGensoHenkan(card)?cnt>=1:cnt>=2));
+            const isLimited=false;
             return(<DesktopCard key={card.id} card={card} count={cnt} isMaxed={isMaxed} isLimited={isLimited}
               onAdd={addCard} onRemove={removeCard} onHover={setHovered} onLeave={()=>setHovered(null)} onMouseMove={handleMM}/>);
           })}
