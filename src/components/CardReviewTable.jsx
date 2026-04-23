@@ -89,22 +89,12 @@ function DesktopPicker({cardId,cardTagArr,tags,groups,calcAdjusters,position,onC
   const toggle=gid=>setCollapsed(p=>({...p,[gid]:!p[gid]}));
 
   const countMap=useMemo(()=>{const m={};for(const t of cardTagArr) m[t]=(m[t]||0)+1;return m;},[cardTagArr]);
-  const groupLock=useMemo(()=>{
-    const m={};
-    for(const tag of tags){
-      if(!tag.groupId) continue;
-      if((countMap[tag.name]||0)>0) m[tag.groupId]=tag.name;
-    }
-    return m;
-  },[tags,countMap]);
 
   const renderBtn=(tag,key)=>{
     const cnt=countMap[key]||0;
-    const isLocked=tag.groupId&&groupLock[tag.groupId]&&groupLock[tag.groupId]!==tag.name;
     const s=Number(tag.score)||0;
     return(
-      <button key={key} className={`tag-toggle-btn ${cnt>0?'on':''} ${isLocked?'locked':''}`}
-        disabled={isLocked}
+      <button key={key} className={`tag-toggle-btn ${cnt>0?'on':''}`}
         onClick={()=>onToggle(cardId,key,'add')}
         onContextMenu={e=>{e.preventDefault();onToggle(cardId,key,'remove');}}>
         {tag.name}
@@ -132,7 +122,6 @@ function DesktopPicker({cardId,cardTagArr,tags,groups,calcAdjusters,position,onC
             <div key={g.id} className="picker-group">
               <button className="picker-group-hd" onClick={()=>toggle(g.id)}>
                 {isOpen?<ChevronDown size={12}/>:<CR size={12}/>}{g.name}
-                {groupLock[g.id]&&<span className="tag-pill" style={{marginLeft:4,fontSize:'.65rem'}}>{groupLock[g.id]}</span>}
               </button>
               {isOpen&&<div className="tag-picker-list">{gTags.map(t=>renderBtn(t,t.name))}</div>}
             </div>
@@ -180,35 +169,26 @@ function MobileBottomSheet({cardId,cardTagArr,tags,groups,calcAdjusters,onClose,
   const [collapsed,setCollapsed]=useState({});
   const toggle=gid=>setCollapsed(p=>({...p,[gid]:!p[gid]}));
   const countMap=useMemo(()=>{const m={};for(const t of cardTagArr) m[t]=(m[t]||0)+1;return m;},[cardTagArr]);
-  const groupLock=useMemo(()=>{
-    const m={};
-    for(const tag of tags){
-      if(!tag.groupId) continue;
-      if((countMap[tag.name]||0)>0) m[tag.groupId]=tag.name;
-    }
-    return m;
-  },[tags,countMap]);
 
   const renderTagRow=(tag,key)=>{
     const cnt=countMap[key]||0;
-    const isLocked=tag.groupId&&groupLock[tag.groupId]&&groupLock[tag.groupId]!==tag.name;
     const s=Number(tag.score)||0;
     return(
-      <div key={key} className={`bs-tag-row ${isLocked?'locked':''}`}>
+      <div key={key} className="bs-tag-row">
         <span className="bs-tag-name">
           {tag.name}
           {s!==0&&<span className="tag-score-hint" style={{color:s>0?'#34d399':'#f87171',marginLeft:4}}>{s>0?`+${s}`:s}</span>}
         </span>
         <div className="bs-tag-controls">
-          <button className="bs-pm-btn minus" disabled={cnt===0||isLocked}
+          <button className="bs-pm-btn minus" disabled={cnt===0}
             onTouchStart={e=>e.stopPropagation()}
-            onTouchEnd={e=>{e.preventDefault();e.stopPropagation();if(!isLocked&&cnt>0)onToggle(cardId,key,'remove');}}>
+            onTouchEnd={e=>{e.preventDefault();e.stopPropagation();if(cnt>0)onToggle(cardId,key,'remove');}}>
             −
           </button>
           <span className="bs-tag-cnt">{cnt||0}</span>
-          <button className="bs-pm-btn plus" disabled={isLocked}
+          <button className="bs-pm-btn plus"
             onTouchStart={e=>e.stopPropagation()}
-            onTouchEnd={e=>{e.preventDefault();e.stopPropagation();if(!isLocked)onToggle(cardId,key,'add');}}>
+            onTouchEnd={e=>{e.preventDefault();e.stopPropagation();onToggle(cardId,key,'add');}}>
             +
           </button>
         </div>
@@ -236,7 +216,6 @@ function MobileBottomSheet({cardId,cardTagArr,tags,groups,calcAdjusters,onClose,
                 <button className="bs-group-hd" onClick={()=>toggle(g.id)}>
                   {isOpen?<ChevronDown size={14}/>:<CR size={14}/>}
                   {g.name}
-                  {groupLock[g.id]&&<span className="tag-pill" style={{marginLeft:6,fontSize:'.68rem'}}>{groupLock[g.id]}</span>}
                 </button>
                 {isOpen&&gTags.map(t=>renderTagRow(t,t.name))}
               </div>
@@ -397,17 +376,6 @@ export default function CardReviewTable({cards,tags,groups,cardTags,setCardTags,
     setCardTags(prev=>{
       const cur=[...(prev[cardId]||[])];
       if(action==='add'){
-        // Group constraint (only for non-adj regular tags)
-        if(!isAdjTag(tagKey)){
-          const tag=tags.find(t=>t.name===tagKey);
-          if(tag?.groupId){
-            const hasDiff=cur.filter(n=>!isAdjTag(n)).some(n=>{
-              const t2=tags.find(t=>t.name===n);
-              return t2?.groupId===tag.groupId&&n!==tagKey;
-            });
-            if(hasDiff) return prev;
-          }
-        }
         cur.push(tagKey);
       } else {
         const idx=[...cur].reverse().findIndex(n=>n===tagKey);
