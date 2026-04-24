@@ -249,77 +249,6 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
   const ungrouped=tags.filter(t=>!t.groupId);
   const getGroupTags=gid=>tags.filter(t=>t.groupId===gid);
 
-  const TagRow=({tag,idx})=>{
-    const isCoeff=tag.useCoefficients;
-    const computedScore=isCoeff?calcTagScore(tag):(Number(getSD(tag.id))||0);
-    return(
-      <div className="tag-row" style={{flexDirection:'column',gap:6}}>
-        <div style={{display:'flex',alignItems:'center',gap:7,width:'100%'}}>
-          <div className="tag-row-left">
-            <span className="tag-pill">{tag.name}</span>
-            <select className="combo-select" style={{fontSize:'.72rem',padding:'3px 6px',maxWidth:90}}
-              value={tag.groupId||''} onChange={e=>updateTagGroup(tag.id,e.target.value)}>
-              <option value="">グループなし</option>
-              {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </div>
-          <div className="tag-score-area">
-            {!isCoeff&&(
-              <input type="number" className="score-input" placeholder="0"
-                value={getSD(tag.id)} onChange={e=>handleSI(tag.id,e.target.value)}/>
-            )}
-            {computedScore!==0&&(
-              <span className="score-preview" style={{color:computedScore>0?'#34d399':'#f87171'}}>
-                {computedScore>0?`+${computedScore}`:computedScore}
-              </span>
-            )}
-          </div>
-          <div style={{display:'flex',gap:2,alignItems:'center'}}>
-            <button className={`btn-icon coeff-mode-btn ${isCoeff?'on':''}`}
-              onClick={()=>updateTagField(tag.id,'useCoefficients',!isCoeff)}
-              title={isCoeff?'直接入力モードに切替':'係数モードに切替'}>
-              <Calculator size={12}/>
-            </button>
-            <button className="btn-icon" onClick={()=>moveTag(idx,-1)}><ArrowUp size={12}/></button>
-            <button className="btn-icon" onClick={()=>moveTag(idx,1)}><ArrowDown size={12}/></button>
-            <button className="btn-icon danger" onClick={()=>delTag(tag.id)}><Trash2 size={13}/></button>
-          </div>
-        </div>
-        {isCoeff&&(
-          <div className="coeff-panel">
-            <div className="coeff-row">
-              <label className="coeff-label">
-                基本価値 <CoeffHelp type="baseValue"/>
-              </label>
-              <input type="number" className="score-input coeff-input" placeholder="0" step="0.5"
-                value={toDisplay(tag.baseValue)} onChange={e=>updateTagField(tag.id,'baseValue',fromInput(e.target.value))}/>
-            </div>
-            <span className="coeff-op">×</span>
-            <div className="coeff-row">
-              <label className="coeff-label">
-                発動容易度 <CoeffHelp type="triggerEase"/>
-              </label>
-              <input type="number" className="score-input coeff-input" placeholder="1.0" step="0.1" min="0" max="1"
-                value={toDisplay(tag.triggerEase)} onChange={e=>updateTagField(tag.id,'triggerEase',fromInput(e.target.value))}/>
-            </div>
-            <span className="coeff-op">×</span>
-            <div className="coeff-row">
-              <label className="coeff-label">
-                期待発動回数 <CoeffHelp type="expectedCount"/>
-              </label>
-              <input type="number" className="score-input coeff-input" placeholder="1" step="0.5" min="0"
-                value={toDisplay(tag.expectedCount)} onChange={e=>updateTagField(tag.id,'expectedCount',fromInput(e.target.value))}/>
-            </div>
-            <span className="coeff-eq">=</span>
-            <span className="coeff-result" style={{color:computedScore>0?'#34d399':computedScore<0?'#f87171':'var(--muted)'}}>
-              {computedScore>0?`+${computedScore}`:computedScore}
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return(
     <div className="tagmgr-layout">
       {/* Tags */}
@@ -337,7 +266,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
         <div className="tag-add-row">
           <input className="search-input" placeholder="タグ名" value={newTagName}
             onChange={e=>setNTN(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()}/>
-          <input type="number" className="score-input" placeholder="0" value={newTagScore} onChange={e=>setNTS(e.target.value)}/>
+          <input type="text" inputMode="decimal" className="score-input" placeholder="0" value={newTagScore} onChange={e=>setNTS(e.target.value)}/>
           <select className="combo-select" value={newTagGroup} onChange={e=>setNTG(e.target.value)}>
             <option value="">グループなし</option>
             {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
@@ -357,7 +286,10 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
                   <button className="btn-icon danger" onClick={()=>delGroup(g.id)}><Trash2 size={12}/></button>
                 </div>
               </div>
-              {gt.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}/>)}
+              {gt.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}
+                groups={groups} getSD={getSD} handleSI={handleSI}
+                updateTagGroup={updateTagGroup} updateTagField={updateTagField}
+                moveTag={moveTag} delTag={delTag}/>)}
             </div>
           );
         })}
@@ -366,7 +298,10 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
             <div className="tag-group-header">
               <span className="tag-group-name" style={{color:'#64748b'}}>グループなし</span>
             </div>
-            {ungrouped.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}/>)}
+            {ungrouped.map(tag=><TagRow key={tag.id} tag={tag} idx={tags.indexOf(tag)}
+              groups={groups} getSD={getSD} handleSI={handleSI}
+              updateTagGroup={updateTagGroup} updateTagField={updateTagField}
+              moveTag={moveTag} delTag={delTag}/>)}
           </div>
         )}
         <div className="tag-add-row" style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--panel-border)'}}>
@@ -400,7 +335,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
               <option value="">-- 選択 --</option>{tagNames.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             <label className="combo-label">スコア</label>
-            <input type="number" className="score-input combo-score" placeholder="0" value={combo.overrideScore} onChange={e=>setCombo(p=>({...p,overrideScore:e.target.value}))}/>
+            <input type="text" inputMode="decimal" className="score-input combo-score" placeholder="0" value={combo.overrideScore} onChange={e=>setCombo(p=>({...p,overrideScore:e.target.value}))}/>
             <label className="combo-label">適用範囲</label>
             <select className="combo-select" value={combo.scope} onChange={e=>setCombo(p=>({...p,scope:e.target.value}))}>
               {SCOPES.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
@@ -447,7 +382,7 @@ export default function TagManager({tags,setTags,groups,setGroups,tagCombos,setT
             <select className="combo-select" value={adj.opType} onChange={e=>setAdj(p=>({...p,opType:e.target.value}))}>
               {OPS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
-            <input type="number" className="score-input" placeholder="数値" value={adj.value}
+            <input type="text" inputMode="decimal" className="score-input" placeholder="数値" value={adj.value}
               onChange={e=>setAdj(p=>({...p,value:e.target.value}))} style={{width:80}}/>
             <select className="combo-select" value={adj.scope} onChange={e=>setAdj(p=>({...p,scope:e.target.value}))}>
               {SCOPES.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
